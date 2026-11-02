@@ -193,8 +193,8 @@
     app.innerHTML = `
       <div class="auth">
         <section class="auth-art">
-          <div class="brand"><span class="brand-name">Gerenciador de Estoque e Vídeos</span></div>
-          <div><div class="big">Cada peça<br>no lugar.<br>Cada vídeo<br>contado.</div></div>
+          <span></span>
+          <div><div class="big">Gerenciador<br>de Estoque<br>e Vídeos</div></div>
           <div style="display:flex;flex-direction:column;gap:14px">
             <p>Estoque por prateleira, fabricantes e os vídeos que a equipe postou em cada conta do TikTok.</p>
             <div class="tag"><span class="stitch"></span>Loja física e TikTok Shop</div>
