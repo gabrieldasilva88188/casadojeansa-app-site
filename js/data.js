@@ -7,15 +7,16 @@ window.SEED = (function () {
   // Contas do TikTok, na mesma ordem da planilha
   const contas = ['OFICIAL', 'RICARDO', 'SHAMA', 'SR LORD', 'IMAGINARIUM'];
 
-  // Equipe da loja (e-mails de exemplo para a demonstração)
+  // Equipe da loja (e-mails de exemplo para a demonstração).
+  // Ricardo e Márcio são admins master fixos: não podem perder o cargo nem ser excluídos.
   const usuarios = [
-    { id: 'u1', nome: 'Ricardo Ronery', email: 'ricardo@loja.com', papel: 'admin' },
-    { id: 'u2', nome: 'Márcio House', email: 'marcio@loja.com', papel: 'funcionario' },
-    { id: 'u3', nome: 'Ketlin Raiane', email: 'ketlin@loja.com', papel: 'funcionario' },
-    { id: 'u4', nome: 'Mariana Cesar', email: 'mariana@loja.com', papel: 'funcionario' },
-    { id: 'u5', nome: 'Gustavo Fialho', email: 'gustavo@loja.com', papel: 'funcionario' },
-    { id: 'u6', nome: 'Dil Ferreira', email: 'dil@loja.com', papel: 'funcionario' },
-    { id: 'u7', nome: 'Nicoli Nayara', email: 'nicoli@loja.com', papel: 'funcionario' }
+    { id: 'u1', nome: 'Ricardo Ronery', email: 'ricardo@loja.com', papel: 'admin', fixo: true },
+    { id: 'u2', nome: 'Márcio House', email: 'marcio@loja.com', papel: 'admin', fixo: true },
+    { id: 'u3', nome: 'Ketlin Raiane', email: 'ketlin@loja.com', papel: 'colaborador' },
+    { id: 'u4', nome: 'Mariana Cesar', email: 'mariana@loja.com', papel: 'colaborador' },
+    { id: 'u5', nome: 'Gustavo Fialho', email: 'gustavo@loja.com', papel: 'colaborador' },
+    { id: 'u6', nome: 'Dil Ferreira', email: 'dil@loja.com', papel: 'colaborador' },
+    { id: 'u7', nome: 'Nicoli Nayara', email: 'nicoli@loja.com', papel: 'colaborador' }
   ];
 
   // Data da planilha (out/2026): todos os produtos importados entram cadastrados nesse dia
@@ -79,7 +80,7 @@ window.SEED = (function () {
   const registros = [
     { usuarioId: 'u2', acao: 'Editou produto', detalhe: `${rot('C1')}: quantidade 12 → 10`, data: momento(0, 11) },
     { usuarioId: 'u3', acao: 'Editou produto', detalhe: `${rot('A8')}: fabricante MVA → MVA JEANS`, data: momento(1, 15) },
-    { usuarioId: 'u1', acao: 'Alterou cargo', detalhe: 'Mariana Cesar: admin master → funcionário', data: momento(2, 10) },
+    { usuarioId: 'u1', acao: 'Alterou cargo', detalhe: 'Mariana Cesar: admin master → colaborador', data: momento(2, 10) },
     { usuarioId: 'u4', acao: 'Editou produto', detalhe: `${rot('E2')}: prateleira E1 → E2`, data: momento(4, 16) },
     { usuarioId: 'u5', acao: 'Adicionou produto', detalhe: rot('W3'), data: momento(6, 9) },
     { usuarioId: 'u1', acao: 'Importou planilha', detalhe: `${produtos.length} produtos da planilha ESTOQUE`, data: CADASTRO }

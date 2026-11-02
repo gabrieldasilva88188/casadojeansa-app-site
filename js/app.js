@@ -4,7 +4,7 @@
 (function () {
   'use strict';
 
-  const KEY = 'gev-prototipo-v3';
+  const KEY = 'gev-prototipo-v4';
   const POR_PAGINA = 40;
 
   // ---------- Estado ----------
@@ -159,7 +159,7 @@
           <div class="side-foot">
             <div class="user-chip">
               <span class="avatar">${iniciais(u.nome)}</span>
-              <span class="who"><b>${esc(u.nome)}</b><span>${u.papel === 'admin' ? 'Admin master' : 'Funcionário'}</span></span>
+              <span class="who"><b>${esc(u.nome)}</b><span>${u.papel === 'admin' ? 'Admin master' : 'Colaborador'}</span></span>
             </div>
             <button class="link-btn" data-acao="sair" type="button">Sair</button>
             <p class="proto-note">Protótipo. Estoque da planilha da loja; os vídeos são exemplos.</p>
@@ -228,8 +228,9 @@
       <div class="demo-box">
         <p>Para a demonstração, entre direto com um perfil de exemplo:</p>
         <div class="demo-btns">
-          <button class="btn btn-ghost" type="button" data-demo="u2">Funcionário (Márcio)</button>
           <button class="btn btn-ghost" type="button" data-demo="u1">Admin master (Ricardo)</button>
+          <button class="btn btn-ghost" type="button" data-demo="u2">Admin master (Márcio)</button>
+          <button class="btn btn-ghost demo-full" type="button" data-demo="u3">Colaboradora (Ketlin)</button>
         </div>
       </div>`);
     $$('[data-demo]').forEach((b) => b.addEventListener('click', () => {
@@ -254,7 +255,7 @@
   PAGINAS.cadastro = function () {
     document.title = 'Criar conta | Gerenciador de Estoque e Vídeos';
     telaAuth(`
-      <div><h1>Criar conta</h1><p class="muted" style="margin-top:6px">Toda conta nova começa como funcionário. O admin master pode mudar o cargo depois.</p></div>
+      <div><h1>Criar conta</h1><p class="muted" style="margin-top:6px">Toda conta nova começa como colaborador. O admin master pode mudar o cargo depois.</p></div>
       <form id="f-cad" novalidate>
         <div class="field"><label for="c-nome">Nome completo</label><input class="input" id="c-nome" autocomplete="name"></div>
         <div class="field"><label for="c-email">E-mail</label><input class="input" id="c-email" type="email" autocomplete="email"></div>
@@ -276,7 +277,7 @@
       if (state.usuarios.some((u) => !u.excluido && u.email.toLowerCase() === email)) return falha('Esse e-mail já tem conta. Use a tela de entrar.');
       if (s1.length < 6) return falha('A senha precisa ter pelo menos 6 caracteres.');
       if (s1 !== s2) return falha('As duas senhas não são iguais.');
-      const u = { id: novoId('u'), nome, email, papel: 'funcionario' };
+      const u = { id: novoId('u'), nome, email, papel: 'colaborador' };
       state.usuarios.push(u);
       state.sessao = u.id;
       registrar('Criou conta', nome);
@@ -803,17 +804,17 @@
             const n = state.videos.filter((v) => v.usuarioId === u.id && dentroDe(v.data, 30)).length;
             return `<tr>
               <td class="prod c-titulo"><span><b>${esc(u.nome)}</b>${voce ? ' <span class="voce">você</span>' : ''}</span><span class="muted">${esc(u.email)}</span></td>
-              <td data-label="Cargo">${voce
-                ? `<span class="pill ${u.papel === 'admin' ? 'pill-admin' : 'pill-ok'}">${u.papel === 'admin' ? 'Admin master' : 'Funcionário'}</span>`
+              <td data-label="Cargo">${voce || u.fixo
+                ? `<span class="pill ${u.papel === 'admin' ? 'pill-admin' : 'pill-ok'}">${u.papel === 'admin' ? 'Admin master' : 'Colaborador'}</span>`
                 : `<select class="input input-sm" data-cargo="${u.id}" aria-label="Cargo de ${esc(u.nome)}">
-                    <option value="funcionario" ${u.papel !== 'admin' ? 'selected' : ''}>Funcionário</option>
+                    <option value="colaborador" ${u.papel !== 'admin' ? 'selected' : ''}>Colaborador</option>
                     <option value="admin" ${u.papel === 'admin' ? 'selected' : ''}>Admin master</option></select>
                   <button class="btn btn-danger-ghost btn-sm show-sm-btn" type="button" data-excluir="${u.id}">Excluir conta</button>`}</td>
               <td class="r num hide-sm" data-label="Vídeos em 30 dias">${n}</td>
-              <td class="hide-sm c-acoes"><div class="row-actions">${voce ? '<span class="muted" style="font-size:.82rem">Sua conta</span>'
+              <td class="hide-sm c-acoes"><div class="row-actions">${voce || u.fixo ? `<span class="muted" style="font-size:.82rem">${u.fixo ? 'Admin master fixo' : 'Sua conta'}</span>`
                 : `<button class="btn btn-danger-ghost btn-sm" type="button" data-excluir="${u.id}">Excluir</button>`}</div></td></tr>`;
           }).join('')}</tbody></table></div>
-        <p class="muted" style="font-size:.85rem;margin-top:10px">${plural(admins, 'admin master', 'admins master')} ativos. Você não pode mudar o próprio cargo nem excluir a própria conta.</p>`;
+        <p class="muted" style="font-size:.85rem;margin-top:10px">${plural(admins, 'admin master', 'admins master')} ativos. Ricardo e Márcio são admins master fixos: o cargo deles não muda e a conta não pode ser excluída. Você também não pode mudar o próprio cargo nem excluir a própria conta.</p>`;
     };
 
     const desenharRegistros = () => {
@@ -847,18 +848,18 @@
     $('#equipe').addEventListener('change', (e) => {
       const sel = e.target.closest('[data-cargo]'); if (!sel) return;
       const u = usuario(sel.dataset.cargo), novo = sel.value;
-      const voltar = () => { sel.value = u.papel === 'admin' ? 'admin' : 'funcionario'; fecharModal(); };
+      const voltar = () => { sel.value = u.papel === 'admin' ? 'admin' : 'colaborador'; fecharModal(); };
       const virarAdmin = novo === 'admin';
       abrirModal({
         titulo: virarAdmin ? `Tornar ${esc(u.nome)} admin master?` : `Tirar o acesso de admin de ${esc(u.nome)}?`,
         corpo: `<p class="muted">${virarAdmin
           ? 'Essa pessoa vai acessar a área Admin: ver os registros de todos, mudar cargos e excluir contas.'
-          : 'Essa pessoa volta a ser funcionário e deixa de ver a área Admin.'}</p>`,
+          : 'Essa pessoa volta a ser colaborador e deixa de ver a área Admin.'}</p>`,
         botoes: [
-          { label: virarAdmin ? 'Tornar admin master' : 'Mudar para funcionário', acao: () => {
-            const antes = u.papel === 'admin' ? 'admin master' : 'funcionário';
+          { label: virarAdmin ? 'Tornar admin master' : 'Mudar para colaborador', acao: () => {
+            const antes = u.papel === 'admin' ? 'admin master' : 'colaborador';
             u.papel = novo;
-            registrar('Alterou cargo', `${u.nome}: ${antes} → ${virarAdmin ? 'admin master' : 'funcionário'}`);
+            registrar('Alterou cargo', `${u.nome}: ${antes} → ${virarAdmin ? 'admin master' : 'colaborador'}`);
             save(); fecharModal(); toast('Cargo alterado'); desenharEquipe(); desenharRegistros();
           } },
           { label: 'Cancelar', cls: 'btn-ghost', acao: voltar }
@@ -877,7 +878,7 @@
         corpo: `<p class="muted">${esc(u.email)} não vai mais conseguir entrar no sistema. ${n ? `Os ${plural(n, 'vídeo', 'vídeos')} e registros dessa pessoa continuam no histórico.` : ''}</p>`,
         botoes: [
           { label: 'Excluir conta', cls: 'btn-red', acao: () => {
-            u.excluido = true; u.papel = 'funcionario';
+            u.excluido = true; u.papel = 'colaborador';
             registrar('Excluiu conta', `${u.nome} (${u.email})`);
             save(); fecharModal(); toast('Conta excluída'); desenharGrafico(); desenharEquipe(); desenharRegistros();
           } },

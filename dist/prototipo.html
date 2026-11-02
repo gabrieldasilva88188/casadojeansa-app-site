@@ -267,6 +267,7 @@ td.prod .muted { font-size: .88rem; }
 .demo-box { border-top: 1px solid var(--line); padding-top: 18px; display: flex; flex-direction: column; gap: 10px; }
 .demo-box p { font-size: .85rem; color: var(--muted); }
 .demo-btns { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.demo-full { grid-column: 1 / -1; }
 
 /* ---------- Modal (em fluxo) e toast ---------- */
 .modal-scrim { position: fixed; inset: 0; background: var(--scrim); display: grid; place-items: center; padding: 16px; z-index: 50; }
@@ -671,15 +672,16 @@ window.SEED = (function () {
   // Contas do TikTok, na mesma ordem da planilha
   const contas = ['OFICIAL', 'RICARDO', 'SHAMA', 'SR LORD', 'IMAGINARIUM'];
 
-  // Equipe da loja (e-mails de exemplo para a demonstração)
+  // Equipe da loja (e-mails de exemplo para a demonstração).
+  // Ricardo e Márcio são admins master fixos: não podem perder o cargo nem ser excluídos.
   const usuarios = [
-    { id: 'u1', nome: 'Ricardo Ronery', email: 'ricardo@loja.com', papel: 'admin' },
-    { id: 'u2', nome: 'Márcio House', email: 'marcio@loja.com', papel: 'funcionario' },
-    { id: 'u3', nome: 'Ketlin Raiane', email: 'ketlin@loja.com', papel: 'funcionario' },
-    { id: 'u4', nome: 'Mariana Cesar', email: 'mariana@loja.com', papel: 'funcionario' },
-    { id: 'u5', nome: 'Gustavo Fialho', email: 'gustavo@loja.com', papel: 'funcionario' },
-    { id: 'u6', nome: 'Dil Ferreira', email: 'dil@loja.com', papel: 'funcionario' },
-    { id: 'u7', nome: 'Nicoli Nayara', email: 'nicoli@loja.com', papel: 'funcionario' }
+    { id: 'u1', nome: 'Ricardo Ronery', email: 'ricardo@loja.com', papel: 'admin', fixo: true },
+    { id: 'u2', nome: 'Márcio House', email: 'marcio@loja.com', papel: 'admin', fixo: true },
+    { id: 'u3', nome: 'Ketlin Raiane', email: 'ketlin@loja.com', papel: 'colaborador' },
+    { id: 'u4', nome: 'Mariana Cesar', email: 'mariana@loja.com', papel: 'colaborador' },
+    { id: 'u5', nome: 'Gustavo Fialho', email: 'gustavo@loja.com', papel: 'colaborador' },
+    { id: 'u6', nome: 'Dil Ferreira', email: 'dil@loja.com', papel: 'colaborador' },
+    { id: 'u7', nome: 'Nicoli Nayara', email: 'nicoli@loja.com', papel: 'colaborador' }
   ];
 
   // Data da planilha (out/2026): todos os produtos importados entram cadastrados nesse dia
@@ -743,7 +745,7 @@ window.SEED = (function () {
   const registros = [
     { usuarioId: 'u2', acao: 'Editou produto', detalhe: `${rot('C1')}: quantidade 12 → 10`, data: momento(0, 11) },
     { usuarioId: 'u3', acao: 'Editou produto', detalhe: `${rot('A8')}: fabricante MVA → MVA JEANS`, data: momento(1, 15) },
-    { usuarioId: 'u1', acao: 'Alterou cargo', detalhe: 'Mariana Cesar: admin master → funcionário', data: momento(2, 10) },
+    { usuarioId: 'u1', acao: 'Alterou cargo', detalhe: 'Mariana Cesar: admin master → colaborador', data: momento(2, 10) },
     { usuarioId: 'u4', acao: 'Editou produto', detalhe: `${rot('E2')}: prateleira E1 → E2`, data: momento(4, 16) },
     { usuarioId: 'u5', acao: 'Adicionou produto', detalhe: rot('W3'), data: momento(6, 9) },
     { usuarioId: 'u1', acao: 'Importou planilha', detalhe: `${produtos.length} produtos da planilha ESTOQUE`, data: CADASTRO }
@@ -760,7 +762,7 @@ window.SEED = (function () {
 (function () {
   'use strict';
 
-  const KEY = 'gev-prototipo-v3';
+  const KEY = 'gev-prototipo-v4';
   const POR_PAGINA = 40;
 
   // ---------- Estado ----------
@@ -915,7 +917,7 @@ window.SEED = (function () {
           <div class="side-foot">
             <div class="user-chip">
               <span class="avatar">${iniciais(u.nome)}</span>
-              <span class="who"><b>${esc(u.nome)}</b><span>${u.papel === 'admin' ? 'Admin master' : 'Funcionário'}</span></span>
+              <span class="who"><b>${esc(u.nome)}</b><span>${u.papel === 'admin' ? 'Admin master' : 'Colaborador'}</span></span>
             </div>
             <button class="link-btn" data-acao="sair" type="button">Sair</button>
             <p class="proto-note">Protótipo. Estoque da planilha da loja; os vídeos são exemplos.</p>
@@ -984,8 +986,9 @@ window.SEED = (function () {
       <div class="demo-box">
         <p>Para a demonstração, entre direto com um perfil de exemplo:</p>
         <div class="demo-btns">
-          <button class="btn btn-ghost" type="button" data-demo="u2">Funcionário (Márcio)</button>
           <button class="btn btn-ghost" type="button" data-demo="u1">Admin master (Ricardo)</button>
+          <button class="btn btn-ghost" type="button" data-demo="u2">Admin master (Márcio)</button>
+          <button class="btn btn-ghost demo-full" type="button" data-demo="u3">Colaboradora (Ketlin)</button>
         </div>
       </div>`);
     $$('[data-demo]').forEach((b) => b.addEventListener('click', () => {
@@ -1010,7 +1013,7 @@ window.SEED = (function () {
   PAGINAS.cadastro = function () {
     document.title = 'Criar conta | Gerenciador de Estoque e Vídeos';
     telaAuth(`
-      <div><h1>Criar conta</h1><p class="muted" style="margin-top:6px">Toda conta nova começa como funcionário. O admin master pode mudar o cargo depois.</p></div>
+      <div><h1>Criar conta</h1><p class="muted" style="margin-top:6px">Toda conta nova começa como colaborador. O admin master pode mudar o cargo depois.</p></div>
       <form id="f-cad" novalidate>
         <div class="field"><label for="c-nome">Nome completo</label><input class="input" id="c-nome" autocomplete="name"></div>
         <div class="field"><label for="c-email">E-mail</label><input class="input" id="c-email" type="email" autocomplete="email"></div>
@@ -1032,7 +1035,7 @@ window.SEED = (function () {
       if (state.usuarios.some((u) => !u.excluido && u.email.toLowerCase() === email)) return falha('Esse e-mail já tem conta. Use a tela de entrar.');
       if (s1.length < 6) return falha('A senha precisa ter pelo menos 6 caracteres.');
       if (s1 !== s2) return falha('As duas senhas não são iguais.');
-      const u = { id: novoId('u'), nome, email, papel: 'funcionario' };
+      const u = { id: novoId('u'), nome, email, papel: 'colaborador' };
       state.usuarios.push(u);
       state.sessao = u.id;
       registrar('Criou conta', nome);
@@ -1559,17 +1562,17 @@ window.SEED = (function () {
             const n = state.videos.filter((v) => v.usuarioId === u.id && dentroDe(v.data, 30)).length;
             return `<tr>
               <td class="prod c-titulo"><span><b>${esc(u.nome)}</b>${voce ? ' <span class="voce">você</span>' : ''}</span><span class="muted">${esc(u.email)}</span></td>
-              <td data-label="Cargo">${voce
-                ? `<span class="pill ${u.papel === 'admin' ? 'pill-admin' : 'pill-ok'}">${u.papel === 'admin' ? 'Admin master' : 'Funcionário'}</span>`
+              <td data-label="Cargo">${voce || u.fixo
+                ? `<span class="pill ${u.papel === 'admin' ? 'pill-admin' : 'pill-ok'}">${u.papel === 'admin' ? 'Admin master' : 'Colaborador'}</span>`
                 : `<select class="input input-sm" data-cargo="${u.id}" aria-label="Cargo de ${esc(u.nome)}">
-                    <option value="funcionario" ${u.papel !== 'admin' ? 'selected' : ''}>Funcionário</option>
+                    <option value="colaborador" ${u.papel !== 'admin' ? 'selected' : ''}>Colaborador</option>
                     <option value="admin" ${u.papel === 'admin' ? 'selected' : ''}>Admin master</option></select>
                   <button class="btn btn-danger-ghost btn-sm show-sm-btn" type="button" data-excluir="${u.id}">Excluir conta</button>`}</td>
               <td class="r num hide-sm" data-label="Vídeos em 30 dias">${n}</td>
-              <td class="hide-sm c-acoes"><div class="row-actions">${voce ? '<span class="muted" style="font-size:.82rem">Sua conta</span>'
+              <td class="hide-sm c-acoes"><div class="row-actions">${voce || u.fixo ? `<span class="muted" style="font-size:.82rem">${u.fixo ? 'Admin master fixo' : 'Sua conta'}</span>`
                 : `<button class="btn btn-danger-ghost btn-sm" type="button" data-excluir="${u.id}">Excluir</button>`}</div></td></tr>`;
           }).join('')}</tbody></table></div>
-        <p class="muted" style="font-size:.85rem;margin-top:10px">${plural(admins, 'admin master', 'admins master')} ativos. Você não pode mudar o próprio cargo nem excluir a própria conta.</p>`;
+        <p class="muted" style="font-size:.85rem;margin-top:10px">${plural(admins, 'admin master', 'admins master')} ativos. Ricardo e Márcio são admins master fixos: o cargo deles não muda e a conta não pode ser excluída. Você também não pode mudar o próprio cargo nem excluir a própria conta.</p>`;
     };
 
     const desenharRegistros = () => {
@@ -1603,18 +1606,18 @@ window.SEED = (function () {
     $('#equipe').addEventListener('change', (e) => {
       const sel = e.target.closest('[data-cargo]'); if (!sel) return;
       const u = usuario(sel.dataset.cargo), novo = sel.value;
-      const voltar = () => { sel.value = u.papel === 'admin' ? 'admin' : 'funcionario'; fecharModal(); };
+      const voltar = () => { sel.value = u.papel === 'admin' ? 'admin' : 'colaborador'; fecharModal(); };
       const virarAdmin = novo === 'admin';
       abrirModal({
         titulo: virarAdmin ? `Tornar ${esc(u.nome)} admin master?` : `Tirar o acesso de admin de ${esc(u.nome)}?`,
         corpo: `<p class="muted">${virarAdmin
           ? 'Essa pessoa vai acessar a área Admin: ver os registros de todos, mudar cargos e excluir contas.'
-          : 'Essa pessoa volta a ser funcionário e deixa de ver a área Admin.'}</p>`,
+          : 'Essa pessoa volta a ser colaborador e deixa de ver a área Admin.'}</p>`,
         botoes: [
-          { label: virarAdmin ? 'Tornar admin master' : 'Mudar para funcionário', acao: () => {
-            const antes = u.papel === 'admin' ? 'admin master' : 'funcionário';
+          { label: virarAdmin ? 'Tornar admin master' : 'Mudar para colaborador', acao: () => {
+            const antes = u.papel === 'admin' ? 'admin master' : 'colaborador';
             u.papel = novo;
-            registrar('Alterou cargo', `${u.nome}: ${antes} → ${virarAdmin ? 'admin master' : 'funcionário'}`);
+            registrar('Alterou cargo', `${u.nome}: ${antes} → ${virarAdmin ? 'admin master' : 'colaborador'}`);
             save(); fecharModal(); toast('Cargo alterado'); desenharEquipe(); desenharRegistros();
           } },
           { label: 'Cancelar', cls: 'btn-ghost', acao: voltar }
@@ -1633,7 +1636,7 @@ window.SEED = (function () {
         corpo: `<p class="muted">${esc(u.email)} não vai mais conseguir entrar no sistema. ${n ? `Os ${plural(n, 'vídeo', 'vídeos')} e registros dessa pessoa continuam no histórico.` : ''}</p>`,
         botoes: [
           { label: 'Excluir conta', cls: 'btn-red', acao: () => {
-            u.excluido = true; u.papel = 'funcionario';
+            u.excluido = true; u.papel = 'colaborador';
             registrar('Excluiu conta', `${u.nome} (${u.email})`);
             save(); fecharModal(); toast('Conta excluída'); desenharGrafico(); desenharEquipe(); desenharRegistros();
           } },
