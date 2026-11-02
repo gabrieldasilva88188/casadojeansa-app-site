@@ -14,7 +14,7 @@ Para atualizar o estoque a partir de uma planilha nova: `python3 tools/importar_
 
 Não precisa instalar nada: abra o `index.html` no navegador. Para publicar, ative o **GitHub Pages** no repositório (Settings → Pages → branch `main`, pasta raiz).
 
-Na tela de login há dois atalhos de demonstração: **Admin master (Ricardo)**, **Admin master (Márcio)** e **Colaboradora (Ketlin)**. As alterações feitas na demonstração ficam salvas só no navegador; o botão "Restaurar dados de exemplo" (tela Admin) volta ao estado inicial.
+Na tela de login há três atalhos de demonstração: **Admin master (Ricardo)**, **Admin master (Márcio)** e **Colaboradora (Ketlin)**. As alterações feitas na demonstração ficam salvas só no navegador; o botão "Restaurar dados de exemplo" (tela Admin) volta ao estado inicial.
 
 ## Telas
 
