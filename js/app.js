@@ -332,19 +332,19 @@
       const tituloVid = contaSel ? `Vídeos (${esc(contaSel)})` : 'Vídeos';
       $('#lista').innerHTML = `
         <p class="muted" style="font-size:.85rem;margin-bottom:10px">${plural(lista.length, 'produto encontrado', 'produtos encontrados')}</p>
-        <div class="table-wrap"><table>
+        <div class="table-wrap"><table class="cards cards-lead">
           <thead><tr><th>Nº prat.</th><th>Produto</th><th class="r">Peças</th><th class="r hide-sm">${tituloVid}</th><th class="hide-sm">Último vídeo</th><th class="r hide-sm">Ações</th></tr></thead>
           <tbody>${vis.map((p) => {
             const nv = videosDe(p.id, contaSel).length;
             const ult = ultimoVideo(p.id, contaSel);
             return `<tr>
-              <td><span class="shelf">${esc(p.prateleira)}</span><span class="local">Local ${p.local}</span></td>
-              <td class="prod"><span>${esc(descricao(p))}</span><span class="muted">${p.fabricante ? esc(p.fabricante) : 'Fabricante não informado'}</span><span class="id">ID ${idTxt(p)}</span>
+              <td class="c-lead"><span class="shelf">${esc(p.prateleira)}</span><span class="local">Local ${p.local}</span></td>
+              <td class="prod c-titulo"><span>${esc(descricao(p))}</span><span class="muted">${p.fabricante ? esc(p.fabricante) : 'Fabricante não informado'}</span><span class="id">ID ${idTxt(p)}</span>
                 <button class="btn btn-ghost btn-sm show-sm-btn" type="button" data-editar="${p.id}">Editar</button></td>
-              <td class="r num nowrap">${pillEstoque(p.quantidade)}</td>
-              <td class="r num hide-sm">${nv}</td>
-              <td class="hide-sm">${ult ? dias(diasDesde(ult)) : '<span class="sem-video">nenhum</span>'}</td>
-              <td class="hide-sm"><div class="row-actions">
+              <td class="r num nowrap" data-label="Peças">${pillEstoque(p.quantidade)}</td>
+              <td class="r num hide-sm" data-label="${tituloVid}">${nv}</td>
+              <td class="hide-sm" data-label="Último vídeo">${ult ? dias(diasDesde(ult)) : '<span class="sem-video">nenhum</span>'}</td>
+              <td class="hide-sm c-acoes"><div class="row-actions">
                 ${p.link ? `<a class="btn btn-ghost btn-sm hide-sm" href="${esc(p.link)}" target="_blank" rel="noopener" aria-label="Abrir ${esc(p.prateleira)} no TikTok Shop">${ICON.link}</a>` : ''}
                 <button class="btn btn-ghost btn-sm" type="button" data-editar="${p.id}">Editar</button>
               </div></td></tr>`;
@@ -590,13 +590,13 @@
       const vis = lista.slice(0, limite);
       const equipe = filtroVideos === 'todos';
       $('#lista-videos').innerHTML = vis.length ? `
-        <div class="table-wrap"><table>
+        <div class="table-wrap"><table class="cards">
           <thead><tr><th>Data e hora</th><th>Produto</th><th class="hide-sm">Conta</th>${equipe ? '<th class="hide-sm">Quem postou</th>' : ''}</tr></thead>
           <tbody>${vis.map((v) => { const p = produto(v.produtoId) || { prateleira: '?', descricao: 'Produto removido' }; return `
-            <tr><td class="num" style="white-space:nowrap">${fmtData(v.data)}</td>
-              <td class="prod"><span><b>${esc(p.prateleira)}</b> ${esc(descricao(p))}</span><span class="show-sm"><span class="conta">${esc(v.conta)}</span>${equipe ? ' ' + esc(nomeDe(v.usuarioId)) : ''}</span></td>
-              <td class="hide-sm"><span class="conta">${esc(v.conta)}</span></td>
-              ${equipe ? `<td class="hide-sm">${esc(nomeDe(v.usuarioId))}</td>` : ''}
+            <tr><td class="num nowrap" data-label="Data e hora">${fmtData(v.data)}</td>
+              <td class="prod c-titulo"><span><b>${esc(p.prateleira)}</b> ${esc(descricao(p))}</span><span class="show-sm"><span class="conta">${esc(v.conta)}</span>${equipe ? ' ' + esc(nomeDe(v.usuarioId)) : ''}</span></td>
+              <td class="hide-sm" data-label="Conta"><span class="conta">${esc(v.conta)}</span></td>
+              ${equipe ? `<td class="hide-sm" data-label="Quem postou">${esc(nomeDe(v.usuarioId))}</td>` : ''}
               </tr>`; }).join('')}
           </tbody></table></div>
         ${lista.length > limite ? `<p style="margin-top:14px"><button class="btn btn-ghost btn-sm" type="button" id="mais-vid">Mostrar mais ${Math.min(20, lista.length - limite)} de ${lista.length - limite}</button></p>` : ''}`
@@ -715,7 +715,7 @@
         <div class="panel-head"><div><h2>Vídeos por conta e semana</h2><p>No formato da planilha da loja.</p></div>
           <select class="input" id="a-mes" aria-label="Mês" style="width:auto">${meses.map((m) => `<option value="${m}" ${m === mesAnalise ? 'selected' : ''}>${nomeMes(m)}</option>`).join('')}</select></div>
         <div class="table-wrap"><table class="semanas">
-          <thead><tr><th>Conta</th>${SEMANAS.map((s) => `<th class="r">${rotSemana(s)}</th>`).join('')}<th class="r">Total</th></tr></thead>
+          <thead><tr><th>Conta</th>${SEMANAS.map((s) => `<th class="r"><span class="longo">${rotSemana(s)}</span><span class="curto">${s[0]}–${s[1]}</span></th>`).join('')}<th class="r">Total</th></tr></thead>
           <tbody>${state.contas.map((c) => {
             const vs = state.videos.filter((v) => v.conta === c && v.data.slice(0, 7) === mesAnalise);
             const porSem = SEMANAS.map(([a, b]) => vs.filter((v) => { const d = new Date(v.data).getDate(); return d >= a && d <= b; }).length);
@@ -726,13 +726,13 @@
     const desenharNunca = () => {
       const vis = nunca.slice(0, limiteNunca);
       $('#lista-nunca').innerHTML = nunca.length ? `
-        <div class="table-wrap"><table>
+        <div class="table-wrap"><table class="cards cards-lead">
           <thead><tr><th>Nº prat.</th><th>Produto</th><th class="r">Peças</th><th class="r hide-sm">Sem vídeo há</th></tr></thead>
           <tbody>${vis.map((d) => `<tr>
-            <td><span class="shelf">${esc(d.p.prateleira)}</span><span class="local">Local ${d.p.local}</span></td>
-            <td class="prod"><span>${esc(descricao(d.p))}</span><span class="muted">${esc(d.p.fabricante || 'Fabricante não informado')}</span></td>
-            <td class="r num">${pillEstoque(d.p.quantidade)}</td>
-            <td class="r num hide-sm">${diasDesde(d.p.criadoEm)} dias <span class="muted">(desde o cadastro)</span></td></tr>`).join('')}</tbody></table></div>
+            <td class="c-lead"><span class="shelf">${esc(d.p.prateleira)}</span><span class="local">Local ${d.p.local}</span></td>
+            <td class="prod c-titulo"><span>${esc(descricao(d.p))}</span><span class="muted">${esc(d.p.fabricante || 'Fabricante não informado')}</span><span class="id">ID ${idTxt(d.p)}</span></td>
+            <td class="r num nowrap" data-label="Peças">${pillEstoque(d.p.quantidade)}</td>
+            <td class="r num hide-sm" data-label="Sem vídeo há"><span>${diasDesde(d.p.criadoEm)} dias <span class="muted">(desde o cadastro)</span></span></td></tr>`).join('')}</tbody></table></div>
         ${nunca.length > limiteNunca ? `<p style="margin-top:14px"><button class="btn btn-ghost btn-sm" type="button" id="mais-nunca">Mostrar mais ${Math.min(20, nunca.length - limiteNunca)} de ${nunca.length - limiteNunca}</button></p>` : ''}`
         : '<div class="table-wrap"><p class="empty">Todos os produtos já têm pelo menos um vídeo.</p></div>';
       const m = $('#mais-nunca'); if (m) m.addEventListener('click', () => { limiteNunca += 20; desenharNunca(); });
@@ -796,21 +796,21 @@
     const desenharEquipe = () => {
       const admins = ativos().filter((u) => u.papel === 'admin').length;
       $('#equipe').innerHTML = `
-        <div class="table-wrap"><table>
+        <div class="table-wrap"><table class="cards">
           <thead><tr><th>Pessoa</th><th>Cargo</th><th class="r hide-sm">Vídeos em 30 dias</th><th class="r hide-sm">Ações</th></tr></thead>
           <tbody>${ativos().map((u) => {
             const voce = u.id === state.sessao;
             const n = state.videos.filter((v) => v.usuarioId === u.id && dentroDe(v.data, 30)).length;
             return `<tr>
-              <td class="prod"><span><b>${esc(u.nome)}</b>${voce ? ' <span class="voce">você</span>' : ''}</span><span class="muted">${esc(u.email)}</span></td>
-              <td>${voce
+              <td class="prod c-titulo"><span><b>${esc(u.nome)}</b>${voce ? ' <span class="voce">você</span>' : ''}</span><span class="muted">${esc(u.email)}</span></td>
+              <td data-label="Cargo">${voce
                 ? `<span class="pill ${u.papel === 'admin' ? 'pill-admin' : 'pill-ok'}">${u.papel === 'admin' ? 'Admin master' : 'Funcionário'}</span>`
                 : `<select class="input input-sm" data-cargo="${u.id}" aria-label="Cargo de ${esc(u.nome)}">
                     <option value="funcionario" ${u.papel !== 'admin' ? 'selected' : ''}>Funcionário</option>
                     <option value="admin" ${u.papel === 'admin' ? 'selected' : ''}>Admin master</option></select>
                   <button class="btn btn-danger-ghost btn-sm show-sm-btn" type="button" data-excluir="${u.id}">Excluir conta</button>`}</td>
-              <td class="r num hide-sm">${n}</td>
-              <td class="hide-sm"><div class="row-actions">${voce ? '<span class="muted" style="font-size:.82rem">Sua conta</span>'
+              <td class="r num hide-sm" data-label="Vídeos em 30 dias">${n}</td>
+              <td class="hide-sm c-acoes"><div class="row-actions">${voce ? '<span class="muted" style="font-size:.82rem">Sua conta</span>'
                 : `<button class="btn btn-danger-ghost btn-sm" type="button" data-excluir="${u.id}">Excluir</button>`}</div></td></tr>`;
           }).join('')}</tbody></table></div>
         <p class="muted" style="font-size:.85rem;margin-top:10px">${plural(admins, 'admin master', 'admins master')} ativos. Você não pode mudar o próprio cargo nem excluir a própria conta.</p>`;
@@ -826,12 +826,12 @@
         .sort((a, b) => b.data.localeCompare(a.data));
       const vis = todos.slice(0, limiteReg);
       $('#lista-reg').innerHTML = vis.length ? `
-        <div class="table-wrap"><table>
+        <div class="table-wrap"><table class="cards">
           <thead><tr><th>Quando</th><th class="hide-sm">Quem</th><th>O que fez</th></tr></thead>
           <tbody>${vis.map((r) => `<tr>
-            <td class="num" style="white-space:nowrap">${fmtData(r.data)}</td>
-            <td class="hide-sm" style="white-space:nowrap">${esc(nomeDe(r.usuarioId))}</td>
-            <td class="prod"><b>${esc(r.acao)}</b><span class="show-sm">${esc(nomeDe(r.usuarioId))}</span><span class="muted">${esc(r.detalhe)}</span></td></tr>`).join('')}</tbody></table></div>
+            <td class="num nowrap" data-label="Quando">${fmtData(r.data)}</td>
+            <td class="hide-sm nowrap" data-label="Quem">${esc(nomeDe(r.usuarioId))}</td>
+            <td class="prod c-titulo"><b>${esc(r.acao)}</b><span class="show-sm">${esc(nomeDe(r.usuarioId))}</span><span class="muted">${esc(r.detalhe)}</span></td></tr>`).join('')}</tbody></table></div>
         ${todos.length > limiteReg ? `<p style="margin-top:14px"><button class="btn btn-ghost btn-sm" type="button" id="mais-reg">Mostrar mais ${Math.min(15, todos.length - limiteReg)} de ${todos.length - limiteReg}</button></p>` : ''}`
         : '<div class="table-wrap"><p class="empty">Nenhum registro com esses filtros.</p></div>';
       const m = $('#mais-reg'); if (m) m.addEventListener('click', () => { limiteReg += 15; desenharRegistros(); });
