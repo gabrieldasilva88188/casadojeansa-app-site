@@ -1,7 +1,12 @@
-// Dados de exemplo do protótipo. Na versão final, tudo isso vem do banco (Supabase)
-// e as vendas/vídeos do TikTok chegam pela sincronização com a TikTok Shop API.
+// Dados do protótipo.
+// - Produtos: vêm da planilha de estoque da loja (js/estoque.js).
+// - Funcionários, vídeos e vendas: EXEMPLOS gerados aqui só para a demonstração.
+// Na versão final, tudo vem do banco (Supabase) e as vendas do TikTok chegam pela API.
 
 window.SEED = (function () {
+  // Contas do TikTok, na mesma ordem da planilha
+  const contas = ['OFICIAL', 'RICARDO', 'SHAMA', 'SR LORD', 'IMAGINARIUM'];
+
   const usuarios = [
     { id: 'u1', nome: 'Gabriel Silva', email: 'gabriel@casadojeans.com', papel: 'admin' },
     { id: 'u2', nome: 'Camila Rocha', email: 'camila@casadojeans.com', papel: 'funcionario' },
@@ -10,50 +15,26 @@ window.SEED = (function () {
     { id: 'u5', nome: 'Bruno Costa', email: 'bruno@casadojeans.com', papel: 'funcionario' }
   ];
 
-  // [codigo, descricao, quantidade, prateleira, vendasLoja30, vendasTikTok30]
-  const base = [
-    ['CDJ-1042', 'Calça jeans skinny cintura alta, lavagem escura', 34, 'A1', 21, 58],
-    ['CDJ-1043', 'Calça jeans mom, lavagem clara', 27, 'A1', 18, 44],
-    ['CDJ-1051', 'Calça wide leg jeans, azul médio', 12, 'A2', 9, 61],
-    ['CDJ-1060', 'Bermuda jeans masculina, lavagem média', 40, 'A3', 26, 12],
-    ['CDJ-1077', 'Jaqueta jeans oversized, destroyed', 8, 'B1', 7, 33],
-    ['CDJ-1078', 'Jaqueta jeans masculina tradicional', 15, 'B1', 11, 6],
-    ['CDJ-1090', 'Saia jeans midi com fenda', 22, 'B2', 14, 27],
-    ['CDJ-1101', 'Short jeans cintura alta, barra desfiada', 3, 'B3', 19, 38],
-    ['CDJ-1115', 'Camisa jeans manga longa, slim', 19, 'C1', 8, 4],
-    ['CDJ-1120', 'Macacão jeans pantacourt', 6, 'C2', 5, 22],
-    ['CDJ-1133', 'Calça jeans reta masculina, lavagem escura', 45, 'A4', 31, 9],
-    ['CDJ-1140', 'Colete jeans feminino cropped', 11, 'C3', 4, 15],
-    ['CDJ-1152', 'Vestido jeans chemise', 9, 'C2', 6, 19],
-    ['CDJ-1166', 'Calça jeans flare, lavagem média', 17, 'A2', 12, 47]
-  ];
+  // Data da planilha (out/2026): todos os produtos importados entram cadastrados nesse dia
+  const CADASTRO = '2026-10-10T09:00:00';
 
-  const produtos = base.map((p, i) => ({
+  const produtos = (window.ESTOQUE || []).map((p, i) => ({
     id: 'p' + (i + 1),
-    codigo: p[0],
-    descricao: p[1],
-    quantidade: p[2],
-    prateleira: p[3],
-    link: 'https://www.tiktok.com/view/product/17' + (29540012 + i * 7311) + '0001',
-    vendasLoja: p[4],
-    vendasTikTok: p[5]
+    codigo: '',
+    local: p.local,
+    prateleira: p.prateleira,
+    descricao: p.descricao,
+    quantidade: p.quantidade,
+    fabricante: p.fabricante,
+    link: '',
+    criadoEm: CADASTRO,
+    vendasLoja: 0,
+    vendas: {} // vendas por conta do TikTok
   }));
 
-  // Gerador pseudoaleatório com semente fixa, para os dados serem sempre os mesmos
-  let s = 20261031;
+  // Gerador pseudoaleatório com semente fixa: os exemplos são sempre os mesmos
+  let s = 20261102;
   const rnd = () => ((s = (s * 1103515245 + 12345) % 2147483648) / 2147483648);
-
-  const hoje = new Date('2026-10-31T18:00:00');
-  const diasAtras = (d, h) => {
-    const x = new Date(hoje);
-    x.setDate(x.getDate() - d);
-    x.setHours(h || 10 + Math.floor(rnd() * 9), Math.floor(rnd() * 60));
-    return x.toISOString();
-  };
-
-  // Peso de cada funcionário (quem grava mais) e de cada produto (quais aparecem mais)
-  const pesoUsuario = { u1: 2, u2: 9, u3: 5, u4: 7, u5: 3 };
-  const pesoProduto = [9, 6, 8, 1, 6, 1, 4, 5, 0, 3, 1, 2, 2, 7];
   const escolher = (pesos) => {
     const total = pesos.reduce((a, b) => a + b, 0);
     let r = rnd() * total;
@@ -61,32 +42,57 @@ window.SEED = (function () {
     return pesos.length - 1;
   };
 
+  const hoje = new Date('2026-11-02T12:30:00');
+  const momento = (diasAtras, hora) => {
+    const x = new Date(hoje);
+    x.setDate(x.getDate() - diasAtras);
+    x.setHours(hora == null ? 9 + Math.floor(rnd() * 10) : hora, Math.floor(rnd() * 60), 0, 0);
+    // nunca no futuro: horários de "hoje" ficam antes do momento de referência
+    if (x > hoje) x.setTime(hoje.getTime() - Math.floor(1 + rnd() * 200) * 60000);
+    return x.toISOString();
+  };
+
+  // Só uma parte dos produtos já aparece em vídeos; os mais "quentes" aparecem mais
+  const comVideo = produtos.filter((p, i) => i % 3 === 0 || p.quantidade >= 4);
+  const pesoProduto = comVideo.map((p, i) => (i % 7 === 0 ? 8 : 1 + Math.floor(rnd() * 4)));
+  const pesoUsuario = [2, 9, 5, 7, 3];
+  const pesoConta = [10, 4, 6, 3, 5];
+
   const videos = [];
-  const uids = Object.keys(pesoUsuario);
-  for (let i = 0; i < 74; i++) {
-    const u = uids[escolher(uids.map((k) => pesoUsuario[k]))];
-    const p = produtos[escolher(pesoProduto)];
+  for (let i = 0; i < 150; i++) {
+    const p = comVideo[escolher(pesoProduto)];
+    // vídeos entre o cadastro (10/10) e hoje
+    const dias = Math.floor(rnd() * rnd() * 23);
     videos.push({
       id: 'v' + (i + 1),
       produtoId: p.id,
-      usuarioId: u,
+      usuarioId: usuarios[escolher(pesoUsuario)].id,
+      conta: contas[escolher(pesoConta)],
       link: 'https://www.tiktok.com/@casadojeans/video/74' + (31000000000 + Math.floor(rnd() * 999999999)),
-      data: diasAtras(Math.floor(rnd() * 30)),
-      visualizacoes: Math.floor(800 + rnd() * rnd() * 48000)
+      data: momento(dias),
+      visualizacoes: Math.floor(600 + rnd() * rnd() * 42000)
     });
   }
   videos.sort((a, b) => b.data.localeCompare(a.data));
 
-  const registros = [
-    { usuarioId: 'u2', acao: 'Editou produto', detalhe: 'CDJ-1101: quantidade 8 → 3', data: diasAtras(0, 16) },
-    { usuarioId: 'u3', acao: 'Adicionou produto', detalhe: 'CDJ-1166 Calça jeans flare', data: diasAtras(1, 11) },
-    { usuarioId: 'u2', acao: 'Editou produto', detalhe: 'CDJ-1077: descrição alterada, link mantido', data: diasAtras(2, 15) },
-    { usuarioId: 'u5', acao: 'Editou produto', detalhe: 'CDJ-1060: prateleira A2 → A3', data: diasAtras(3, 10) },
-    { usuarioId: 'u1', acao: 'Adicionou produto', detalhe: 'CDJ-1152 Vestido jeans chemise', data: diasAtras(5, 9) },
-    { usuarioId: 'u4', acao: 'Editou produto', detalhe: 'CDJ-1043: descrição alterada, link atualizado', data: diasAtras(6, 17) },
-    { usuarioId: 'u3', acao: 'Editou produto', detalhe: 'CDJ-1133: quantidade 52 → 45', data: diasAtras(8, 13) },
-    { usuarioId: 'u2', acao: 'Adicionou produto', detalhe: 'CDJ-1140 Colete jeans feminino cropped', data: diasAtras(11, 12) }
-  ];
+  // Vendas de exemplo: produtos com vídeo vendem mais, e na conta onde foram postados
+  videos.forEach((v) => {
+    const p = produtos.find((x) => x.id === v.produtoId);
+    const n = Math.floor(rnd() * 3);
+    if (n) p.vendas[v.conta] = (p.vendas[v.conta] || 0) + n;
+  });
+  produtos.forEach((p) => { if (rnd() < 0.35) p.vendasLoja = 1 + Math.floor(rnd() * 3); });
 
-  return { usuarios, produtos, videos, registros, hoje: hoje.toISOString() };
+  const pp = (prat) => produtos.find((p) => p.prateleira === prat) || produtos[0];
+  const rot = (prat) => `${prat} ${pp(prat).descricao}`;
+  const registros = [
+    { usuarioId: 'u2', acao: 'Editou produto', detalhe: `${rot('C1')}: quantidade 12 → 10`, data: momento(0, 11) },
+    { usuarioId: 'u3', acao: 'Editou produto', detalhe: `${rot('A8')}: fabricante MVA → MVA JEANS`, data: momento(1, 15) },
+    { usuarioId: 'u1', acao: 'Alterou cargo', detalhe: 'Bruno Costa: admin master → funcionário', data: momento(2, 10) },
+    { usuarioId: 'u4', acao: 'Editou produto', detalhe: `${rot('E2')}: prateleira E1 → E2`, data: momento(4, 16) },
+    { usuarioId: 'u5', acao: 'Adicionou produto', detalhe: rot('W3'), data: momento(6, 9) },
+    { usuarioId: 'u1', acao: 'Importou planilha', detalhe: `${produtos.length} produtos da planilha ESTOQUE`, data: CADASTRO }
+  ].map((r) => ({ ...r, data: new Date(r.data).toISOString() }));
+
+  return { contas, usuarios, produtos, videos, registros };
 })();

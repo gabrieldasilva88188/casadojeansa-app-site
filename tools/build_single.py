@@ -4,6 +4,7 @@ from pathlib import Path
 
 raiz = Path(__file__).resolve().parent.parent
 css = (raiz / "styles.css").read_text(encoding="utf-8")
+estoque_js = (raiz / "js" / "estoque.js").read_text(encoding="utf-8")
 data_js = (raiz / "js" / "data.js").read_text(encoding="utf-8")
 app_js = (raiz / "js" / "app.js").read_text(encoding="utf-8")
 
@@ -14,6 +15,9 @@ html = f"""<title>Casa do Jeans</title>
 {css}
 </style>
 <div id="app"></div>
+<script>
+{estoque_js}
+</script>
 <script>
 {data_js}
 </script>
