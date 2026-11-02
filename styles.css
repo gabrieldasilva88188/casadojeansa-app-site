@@ -1,4 +1,4 @@
-/* Casa do Jeans — protótipo
+/* Gerenciador de Estoque e Vídeos — protótipo
    Layout: barra lateral cor de denim com a ourela (selvedge) vermelha na borda;
    no celular vira barra superior + navegação inferior, já pensando no app Android. */
 :root {
@@ -93,7 +93,7 @@ a { color: inherit; }
   background-image: linear-gradient(90deg, #fff 0 2px, var(--selvedge) 2px 6px, #fff 6px 8px, transparent 8px);
 }
 .brand { display: flex; flex-direction: column; gap: 2px; padding-bottom: 28px; }
-.brand-name { font-size: 1.6rem; font-weight: 800; font-stretch: 70%; letter-spacing: .01em; line-height: 1; }
+.brand-name { font-size: 1.45rem; font-weight: 800; font-stretch: 70%; letter-spacing: .01em; line-height: 1.05; text-wrap: balance; }
 .brand-sub { font-size: .8rem; opacity: .7; }
 .nav { display: flex; flex-direction: column; gap: 2px; }
 .nav a {
@@ -291,6 +291,8 @@ td.prod .muted { font-size: .88rem; }
 
 /* ---------- Ajustes da versão 2 (modelo da planilha) ---------- */
 .err { font-size: .85rem; color: var(--danger); }
+.nowrap { white-space: nowrap; }
+.id { display: block; font-size: .75rem; color: var(--muted); font-variant-numeric: tabular-nums; margin-top: 2px; }
 .opt { font-weight: 400; color: var(--muted); }
 .label-like { font-weight: 600; font-size: .9rem; }
 .local { display: block; font-size: .72rem; color: var(--muted); margin-top: 4px; white-space: nowrap; }
@@ -337,7 +339,7 @@ tr.apagado td { opacity: .4; }
     padding-right: max(16px, env(safe-area-inset-right, 0px));
   }
   body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--denim); }
-  .topbar .brand-name { font-size: 1.3rem; }
+  .topbar .brand-name { font-size: 1.15rem; }
   .tabbar {
     display: grid; grid-auto-flow: column; grid-auto-columns: 1fr;
     position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;

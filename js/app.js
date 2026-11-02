@@ -1,10 +1,10 @@
-/* Casa do Jeans — protótipo navegável (sem backend).
+/* Gerenciador de Estoque e Vídeos — protótipo navegável (sem backend).
    Os dados ficam só no navegador de quem está usando. Na versão final,
    cada função "salvar" vira uma chamada ao Supabase. */
 (function () {
   'use strict';
 
-  const KEY = 'cdj-prototipo-v2';
+  const KEY = 'gev-prototipo-v3';
   const POR_PAGINA = 40;
 
   // ---------- Estado ----------
@@ -48,9 +48,10 @@
   const novoId = (pref) => pref + Date.now().toString(36) + Math.floor(Math.random() * 1000);
   const descricao = (p) => p.descricao || 'Sem descrição';
   const rotulo = (p) => `${p.prateleira} ${descricao(p)}`;
+  const idTxt = (p) => '#' + String(p.num).padStart(4, '0');
+  const proximoNum = () => state.produtos.reduce((m, p) => Math.max(m, p.num || 0), 0) + 1;
   const plural = (n, um, varios) => `${fmtN(n)} ${n === 1 ? um : varios}`;
   const dias = (n) => (n === 0 ? 'hoje' : n === 1 ? 'há 1 dia' : `há ${n} dias`);
-  const vendasTik = (p, conta) => conta ? (p.vendas[conta] || 0) : Object.values(p.vendas).reduce((a, b) => a + b, 0);
 
   function registrar(acao, detalhe) {
     state.registros.unshift({ usuarioId: state.sessao, acao, detalhe, data: agora().toISOString() });
@@ -112,7 +113,7 @@
     fecharModal();
     (PAGINAS[rota] || PAGINAS.produtos)();
     window.scrollTo(0, 0);
-    const h1 = $('h1'); if (h1) document.title = h1.textContent + ' | Casa do Jeans';
+    const h1 = $('h1'); if (h1) document.title = h1.textContent + ' | Gerenciador de Estoque e Vídeos';
   }
 
   // ---------- Modal (substitui confirm/alert) ----------
@@ -153,7 +154,7 @@
     app.innerHTML = `
       <div class="shell">
         <aside class="side">
-          <div class="brand"><span class="brand-name">Casa do Jeans</span><span class="brand-sub">Estoque e vídeos do TikTok Shop</span></div>
+          <div class="brand"><span class="brand-name">Gerenciador de Estoque e Vídeos</span><span class="brand-sub">Loja física e TikTok Shop</span></div>
           <nav class="nav" aria-label="Menu principal">${links}</nav>
           <div class="side-foot">
             <div class="user-chip">
@@ -161,12 +162,12 @@
               <span class="who"><b>${esc(u.nome)}</b><span>${u.papel === 'admin' ? 'Admin master' : 'Funcionário'}</span></span>
             </div>
             <button class="link-btn" data-acao="sair" type="button">Sair</button>
-            <p class="proto-note">Protótipo. Estoque da planilha da loja; funcionários, vídeos e vendas são exemplos.</p>
+            <p class="proto-note">Protótipo. Estoque da planilha da loja; os vídeos são exemplos.</p>
           </div>
         </aside>
         <div class="topbar-wrap">
           <header class="topbar">
-            <span class="brand-name">Casa do Jeans</span>
+            <span class="brand-name">Gerenciador de Estoque e Vídeos</span>
             <button class="link-btn" style="color:inherit" data-acao="sair" type="button">Sair</button>
           </header>
           <main class="main" id="conteudo"><div class="page">${conteudo}</div></main>
@@ -192,7 +193,7 @@
     app.innerHTML = `
       <div class="auth">
         <section class="auth-art">
-          <div class="brand"><span class="brand-name">Casa do Jeans</span></div>
+          <div class="brand"><span class="brand-name">Gerenciador de Estoque e Vídeos</span></div>
           <div><div class="big">Cada peça<br>no lugar.<br>Cada vídeo<br>contado.</div></div>
           <div style="display:flex;flex-direction:column;gap:14px">
             <p>Estoque por prateleira, fabricantes e os vídeos que a equipe postou em cada conta do TikTok.</p>
@@ -212,12 +213,12 @@
   const PAGINAS = {};
 
   PAGINAS.login = function () {
-    document.title = 'Entrar | Casa do Jeans';
+    document.title = 'Entrar | Gerenciador de Estoque e Vídeos';
     telaAuth(`
       <div><h1>Entrar</h1><p class="muted" style="margin-top:6px">Use o e-mail cadastrado na loja.</p></div>
       <form id="f-login" novalidate>
         <div class="field"><label for="l-email">E-mail</label>
-          <input class="input" id="l-email" type="email" autocomplete="email" placeholder="nome@casadojeans.com"></div>
+          <input class="input" id="l-email" type="email" autocomplete="email" placeholder="nome@loja.com"></div>
         <div class="field"><label for="l-senha">Senha</label>
           <input class="input" id="l-senha" type="password" autocomplete="current-password"></div>
         <p class="err" id="l-err" role="alert" hidden></p>
@@ -227,8 +228,8 @@
       <div class="demo-box">
         <p>Para a demonstração, entre direto com um perfil de exemplo:</p>
         <div class="demo-btns">
-          <button class="btn btn-ghost" type="button" data-demo="u2">Funcionária (Camila)</button>
-          <button class="btn btn-ghost" type="button" data-demo="u1">Admin master (Gabriel)</button>
+          <button class="btn btn-ghost" type="button" data-demo="u2">Funcionário (Márcio)</button>
+          <button class="btn btn-ghost" type="button" data-demo="u1">Admin master (Ricardo)</button>
         </div>
       </div>`);
     $$('[data-demo]').forEach((b) => b.addEventListener('click', () => {
@@ -251,7 +252,7 @@
   };
 
   PAGINAS.cadastro = function () {
-    document.title = 'Criar conta | Casa do Jeans';
+    document.title = 'Criar conta | Gerenciador de Estoque e Vídeos';
     telaAuth(`
       <div><h1>Criar conta</h1><p class="muted" style="margin-top:6px">Toda conta nova começa como funcionário. O admin master pode mudar o cargo depois.</p></div>
       <form id="f-cad" novalidate>
@@ -271,7 +272,7 @@
       const err = $('#c-err');
       const falha = (m) => { err.textContent = m; err.hidden = false; };
       if (!nome || !email || !s1) return falha('Preencha nome, e-mail e senha.');
-      if (!/^\S+@\S+\.\S+$/.test(email)) return falha('Digite um e-mail válido, como nome@casadojeans.com.');
+      if (!/^\S+@\S+\.\S+$/.test(email)) return falha('Digite um e-mail válido, como nome@loja.com.');
       if (state.usuarios.some((u) => !u.excluido && u.email.toLowerCase() === email)) return falha('Esse e-mail já tem conta. Use a tela de entrar.');
       if (s1.length < 6) return falha('A senha precisa ter pelo menos 6 caracteres.');
       if (s1 !== s2) return falha('As duas senhas não são iguais.');
@@ -304,7 +305,7 @@
         <a class="btn" href="#produto-novo">${ICON.mais}Adicionar produto</a>
       </div>
       <div class="toolbar">
-        <div class="search">${ICON.busca}<input class="input" id="busca" type="search" placeholder="Buscar por prateleira, descrição ou fabricante" value="${esc(F.busca)}" aria-label="Buscar produto"></div>
+        <div class="search">${ICON.busca}<input class="input" id="busca" type="search" placeholder="Buscar por prateleira, descrição, fabricante ou ID" value="${esc(F.busca)}" aria-label="Buscar produto"></div>
         <select class="input" id="f-local" aria-label="Local"><option value="">Todos os locais</option>
           ${[1, 2].map((l) => `<option value="${l}" ${F.local == l ? 'selected' : ''}>Local ${l}</option>`).join('')}</select>
         <select class="input" id="f-letra" aria-label="Prateleira"><option value="">Todas as prateleiras</option>
@@ -319,7 +320,7 @@
       const q = F.busca.trim().toLowerCase();
       const lista = state.produtos.filter((p) =>
         (!q || p.prateleira.toLowerCase() === q || descricao(p).toLowerCase().includes(q) ||
-          p.fabricante.toLowerCase().includes(q) || (p.codigo || '').toLowerCase().includes(q) || p.prateleira.toLowerCase().startsWith(q)) &&
+          p.fabricante.toLowerCase().includes(q) || idTxt(p) === (q.startsWith('#') ? q : '#' + q.padStart(4, '0')) || p.prateleira.toLowerCase().startsWith(q)) &&
         (!F.local || p.local == F.local) &&
         (!F.letra || (p.prateleira.match(/^[A-Z]+/) || [''])[0] === F.letra) &&
         (!F.fab || p.fabricante === F.fab)).sort(ordemPrat);
@@ -332,17 +333,18 @@
       $('#lista').innerHTML = `
         <p class="muted" style="font-size:.85rem;margin-bottom:10px">${plural(lista.length, 'produto encontrado', 'produtos encontrados')}</p>
         <div class="table-wrap"><table>
-          <thead><tr><th>Nº prat.</th><th>Produto</th><th class="r">Peças</th><th class="r hide-sm">${tituloVid}</th><th class="hide-sm">Último vídeo</th><th class="r"><span class="hide-sm">Ações</span></th></tr></thead>
+          <thead><tr><th>Nº prat.</th><th>Produto</th><th class="r">Peças</th><th class="r hide-sm">${tituloVid}</th><th class="hide-sm">Último vídeo</th><th class="r hide-sm">Ações</th></tr></thead>
           <tbody>${vis.map((p) => {
             const nv = videosDe(p.id, contaSel).length;
             const ult = ultimoVideo(p.id, contaSel);
             return `<tr>
               <td><span class="shelf">${esc(p.prateleira)}</span><span class="local">Local ${p.local}</span></td>
-              <td class="prod"><span>${esc(descricao(p))}</span><span class="muted">${p.fabricante ? esc(p.fabricante) : 'Fabricante não informado'}${p.codigo ? ', cód. ' + esc(p.codigo) : ''}</span></td>
-              <td class="r num">${pillEstoque(p.quantidade)}</td>
+              <td class="prod"><span>${esc(descricao(p))}</span><span class="muted">${p.fabricante ? esc(p.fabricante) : 'Fabricante não informado'}</span><span class="id">ID ${idTxt(p)}</span>
+                <button class="btn btn-ghost btn-sm show-sm-btn" type="button" data-editar="${p.id}">Editar</button></td>
+              <td class="r num nowrap">${pillEstoque(p.quantidade)}</td>
               <td class="r num hide-sm">${nv}</td>
               <td class="hide-sm">${ult ? dias(diasDesde(ult)) : '<span class="sem-video">nenhum</span>'}</td>
-              <td><div class="row-actions">
+              <td class="hide-sm"><div class="row-actions">
                 ${p.link ? `<a class="btn btn-ghost btn-sm hide-sm" href="${esc(p.link)}" target="_blank" rel="noopener" aria-label="Abrir ${esc(p.prateleira)} no TikTok Shop">${ICON.link}</a>` : ''}
                 <button class="btn btn-ghost btn-sm" type="button" data-editar="${p.id}">Editar</button>
               </div></td></tr>`;
@@ -365,7 +367,7 @@
 
   // Formulário compartilhado entre adicionar e editar (mesmas colunas da planilha)
   function formProduto(p) {
-    const v = p || { local: '', prateleira: '', descricao: '', quantidade: '', fabricante: '', codigo: '', link: '' };
+    const v = p || { local: '', prateleira: '', descricao: '', quantidade: '', fabricante: '', link: '' };
     return `
       <form id="f-prod" class="panel form-panel" novalidate>
         <div class="grid-form">
@@ -386,9 +388,7 @@
             <input class="input" id="p-fab" list="lista-fab" value="${esc(v.fabricante)}" placeholder="Ex.: DIXON JEANS" autocomplete="off">
             <datalist id="lista-fab">${fabricantes().map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
             <span class="hint">Escolha da lista para não repetir o mesmo fabricante com outro nome.</span></div>
-          <div class="field"><label for="p-cod">Código do produto <span class="opt">(opcional)</span></label>
-            <input class="input" id="p-cod" value="${esc(v.codigo)}" autocomplete="off"></div>
-          <div class="field"><label for="p-link">Link no TikTok Shop <span class="opt">(opcional)</span></label>
+          <div class="field span-2"><label for="p-link">Link no TikTok Shop <span class="opt">(opcional)</span></label>
             <input class="input" id="p-link" type="url" value="${esc(v.link)}" placeholder="https://www.tiktok.com/view/product/...">
             <span class="err" data-err="link"></span></div>
         </div>
@@ -406,7 +406,6 @@
       descricao: $('#p-desc').value.trim().replace(/\s+/g, ' '),
       quantidade: $('#p-qtd').value.trim(),
       fabricante: $('#p-fab').value.trim().replace(/\s+/g, ' ').toUpperCase(),
-      codigo: $('#p-cod').value.trim(),
       link: $('#p-link').value.trim()
     };
     const erros = {};
@@ -434,14 +433,15 @@
       <div class="page-head"><div>
         <a class="link-btn" href="#produtos">Voltar para produtos</a>
         <h1 style="margin-top:10px">Adicionar produto</h1>
-        <p>Os mesmos dados da planilha de estoque: local, prateleira, descrição, peças e fabricante.</p></div></div>
+        <p>Os mesmos dados da planilha de estoque: local, prateleira, descrição, peças e fabricante. O ID ${'#' + String(proximoNum()).padStart(4, '0')} é criado automaticamente.</p></div></div>
       ${formProduto(null)}`);
     $('#f-prod').addEventListener('submit', (e) => {
       e.preventDefault();
       const d = lerFormProduto(null);
       if (!d) return;
-      state.produtos.push({ id: novoId('p'), ...d, criadoEm: agora().toISOString(), vendasLoja: 0, vendas: {} });
-      registrar('Adicionou produto', `${d.prateleira} ${d.descricao}`);
+      const num = proximoNum();
+      state.produtos.push({ id: novoId('p'), num, ...d, criadoEm: agora().toISOString() });
+      registrar('Adicionou produto', `${d.prateleira} ${d.descricao} (ID #${String(num).padStart(4, '0')})`);
       save();
       toast('Produto adicionado');
       ir('produtos');
@@ -457,7 +457,6 @@
     if (d.descricao !== p.descricao) m.push(['Descrição', `${v(p.descricao)} → ${d.descricao}`]);
     if (d.quantidade !== p.quantidade) m.push(['Peças', `${p.quantidade} → ${d.quantidade}`]);
     if (d.fabricante !== p.fabricante) m.push(['Fabricante', `${v(p.fabricante)} → ${v(d.fabricante)}`]);
-    if (d.codigo !== (p.codigo || '')) m.push(['Código', `${v(p.codigo)} → ${v(d.codigo)}`]);
     if (d.link !== (p.link || '')) m.push(['Link', d.link ? (p.link ? 'link atualizado' : 'link adicionado') : 'link removido']);
     return m;
   }
@@ -471,7 +470,7 @@
       <div class="page-head"><div>
         <a class="link-btn" href="#produtos">Voltar para produtos</a>
         <h1 style="margin-top:10px">Editar prateleira ${esc(p.prateleira)}</h1>
-        <p>${esc(descricao(p))}. ${nv ? `${plural(nv, 'vídeo', 'vídeos')}, o último ${dias(diasDesde(ult))}.` : 'Ainda sem vídeos.'}</p></div></div>
+        <p>ID ${idTxt(p)}. ${esc(descricao(p))}. ${nv ? `${plural(nv, 'vídeo', 'vídeos')}, o último ${dias(diasDesde(ult))}.` : 'Ainda sem vídeos.'}</p></div></div>
       ${aviso ? `<div class="notice notice-info form-panel" role="status">${ICON.alerta}<span>${aviso}</span></div>` : ''}
       ${formProduto(p)}
       <section class="panel form-panel">
@@ -564,11 +563,8 @@
             <select class="input" id="v-conta"><option value="">Em qual conta foi postado?</option>
               ${state.contas.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select>
             <span class="err" data-err="conta"></span></div>
-          <div class="field"><label for="v-link">Link do vídeo</label>
-            <input class="input" id="v-link" type="url" placeholder="https://www.tiktok.com/@.../video/...">
-            <span class="err" data-err="link"></span></div>
-          <div class="field span-2"><span class="label-like">Data e hora da postagem</span>
-            <div class="clock" aria-live="off">${ICON.relogio}<span id="v-agora" class="num">${fmtDataCompleta(agora())}</span><span class="muted">horário do sistema, salvo ao registrar</span></div></div>
+          <div class="field"><span class="label-like">Data e hora da postagem</span>
+            <div class="clock" aria-live="off">${ICON.relogio}<span id="v-agora" class="num">${fmtDataCompleta(agora())}</span></div><span class="hint">Horário do sistema, salvo no momento do registro.</span></div>
         </div>
         <div class="form-actions" style="margin-top:22px"><button class="btn" type="submit">Registrar vídeo</button></div>
       </form>
@@ -595,14 +591,13 @@
       const equipe = filtroVideos === 'todos';
       $('#lista-videos').innerHTML = vis.length ? `
         <div class="table-wrap"><table>
-          <thead><tr><th>Data e hora</th><th>Produto</th><th class="hide-sm">Conta</th>${equipe ? '<th class="hide-sm">Quem postou</th>' : ''}<th class="r hide-sm">Visualizações</th><th class="r hide-sm">Vídeo</th></tr></thead>
+          <thead><tr><th>Data e hora</th><th>Produto</th><th class="hide-sm">Conta</th>${equipe ? '<th class="hide-sm">Quem postou</th>' : ''}</tr></thead>
           <tbody>${vis.map((v) => { const p = produto(v.produtoId) || { prateleira: '?', descricao: 'Produto removido' }; return `
             <tr><td class="num" style="white-space:nowrap">${fmtData(v.data)}</td>
               <td class="prod"><span><b>${esc(p.prateleira)}</b> ${esc(descricao(p))}</span><span class="show-sm"><span class="conta">${esc(v.conta)}</span>${equipe ? ' ' + esc(nomeDe(v.usuarioId)) : ''}</span></td>
               <td class="hide-sm"><span class="conta">${esc(v.conta)}</span></td>
               ${equipe ? `<td class="hide-sm">${esc(nomeDe(v.usuarioId))}</td>` : ''}
-              <td class="r num hide-sm">${v.visualizacoes == null ? '<span class="muted">aguardando</span>' : fmtN(v.visualizacoes)}</td>
-              <td class="hide-sm"><div class="row-actions"><a class="btn btn-ghost btn-sm" href="${esc(v.link)}" target="_blank" rel="noopener" aria-label="Abrir vídeo">${ICON.link}</a></div></td></tr>`; }).join('')}
+              </tr>`; }).join('')}
           </tbody></table></div>
         ${lista.length > limite ? `<p style="margin-top:14px"><button class="btn btn-ghost btn-sm" type="button" id="mais-vid">Mostrar mais ${Math.min(20, lista.length - limite)} de ${lista.length - limite}</button></p>` : ''}`
         : `<div class="table-wrap"><p class="empty">${filtroVideos === 'meus' ? 'Nenhum vídeo seu' : 'Nenhum vídeo'}${contaSel ? ' na conta ' + esc(contaSel) : ''} ainda. Use o formulário acima depois de postar.</p></div>`;
@@ -618,20 +613,18 @@
       const txt = $('#v-prod').value.trim();
       const prat = txt.split(/\s+-\s+|\s+/)[0].toUpperCase();
       const p = state.produtos.find((x) => x.prateleira + ' - ' + descricao(x) === txt) || state.produtos.find((x) => x.prateleira === prat);
-      const conta = $('#v-conta').value, link = $('#v-link').value.trim();
+      const conta = $('#v-conta').value;
       const erros = {};
       if (!txt) erros.prod = 'Escolha o produto que aparece no vídeo.';
       else if (!p) erros.prod = 'Não achamos esse produto. Digite o nº da prateleira, como A1, e escolha da lista.';
       if (!conta) erros.conta = 'Escolha a conta onde o vídeo foi postado.';
-      if (!/^https:\/\/\S+\.\S+/.test(link)) erros.link = 'Cole o link completo do vídeo, começando com https://';
-      else if (state.videos.some((v) => v.link === link)) erros.link = 'Esse vídeo já foi registrado.';
       $$('#f-video [data-err]').forEach((el) => {
         el.textContent = erros[el.dataset.err] || '';
         el.parentElement.querySelector('.input').setAttribute('aria-invalid', erros[el.dataset.err] ? 'true' : 'false');
       });
       if (Object.keys(erros).length) { $('#f-video [aria-invalid="true"]').focus(); return; }
       const quando = agora(); // data e hora do sistema
-      state.videos.unshift({ id: novoId('v'), produtoId: p.id, usuarioId: state.sessao, conta, link, data: quando.toISOString(), visualizacoes: null });
+      state.videos.unshift({ id: novoId('v'), produtoId: p.id, usuarioId: state.sessao, conta, data: quando.toISOString() });
       save();
       toast(`Vídeo registrado em ${fmtData(quando.toISOString())}`);
       filtroVideos = 'meus';
@@ -674,16 +667,14 @@
     const dados = state.produtos.map((p) => {
       const vs = videosDe(p.id, conta);
       const ult = vs.length ? vs.reduce((a, v) => (v.data > a ? v.data : a), vs[0].data) : null;
-      return { p, videos: vs.length, ult, semVideo: ult ? diasDesde(ult) : null, tik: vendasTik(p, conta) };
+      return { p, videos: vs.length, ult, semVideo: ult ? diasDesde(ult) : null };
     });
     const vids30 = state.videos.filter((v) => (!conta || v.conta === conta) && dentroDe(v.data, 30)).length;
     const nunca = dados.filter((d) => !d.videos).sort((a, b) => b.p.quantidade - a.p.quantidade || ordemPrat(a.p, b.p));
     const nuncaComEstoque = nunca.filter((d) => d.p.quantidade > 0).length;
     const maisVideos = dados.filter((d) => d.videos).sort((a, b) => b.videos - a.videos || ordemPrat(a.p, b.p)).slice(0, 10);
     const parados = dados.filter((d) => d.videos && d.p.quantidade > 0).sort((a, b) => b.semVideo - a.semVideo || a.videos - b.videos).slice(0, 10);
-    const vendidos = dados.map((d) => ({ ...d, total: d.tik + (conta ? 0 : d.p.vendasLoja) }))
-      .filter((d) => d.total).sort((a, b) => b.total - a.total).slice(0, 8);
-    const totTik = dados.reduce((a, d) => a + d.tik, 0);
+    const pecasSemVideo = nunca.reduce((a, d) => a + d.p.quantidade, 0);
     const rot = (p) => `<b>${esc(p.prateleira)}</b>${esc(descricao(p))}`;
 
     // meses que têm vídeos, para a tabela por semana
@@ -695,13 +686,13 @@
 
     shell('analise', `
       <div class="page-head"><div><h1>Análise dos produtos</h1>
-        <p>${conta ? `Só a conta ${esc(conta)}.` : 'Todas as contas do TikTok.'} Quais peças têm mais vídeos, quais estão paradas e o que mais vende.</p></div>
+        <p>${conta ? `Só a conta ${esc(conta)}.` : 'Todas as contas do TikTok.'} Quais peças têm mais vídeos e quais estão paradas.</p></div>
         ${seletorConta('a-conta')}</div>
       <div class="stats">
         <div class="stat"><span class="v">${vids30}</span><span class="l">vídeos nos últimos 30 dias</span></div>
         <div class="stat"><span class="v">${dados.filter((d) => d.videos).length}</span><span class="l">produtos com vídeo</span></div>
         <div class="stat"><span class="v">${nunca.length}</span><span class="l">produtos sem nenhum vídeo</span></div>
-        <div class="stat"><span class="v">${fmtN(totTik)}</span><span class="l">vendas no TikTok (exemplo)</span></div>
+        <div class="stat"><span class="v">${fmtN(pecasSemVideo)}</span><span class="l">peças em estoque sem vídeo</span></div>
       </div>
       <div class="two-col">
         <section class="panel">
@@ -730,15 +721,7 @@
             const porSem = SEMANAS.map(([a, b]) => vs.filter((v) => { const d = new Date(v.data).getDate(); return d >= a && d <= b; }).length);
             return `<tr class="${conta && conta !== c ? 'apagado' : ''}"><td class="code">${esc(c)}</td>${porSem.map((n) => `<td class="r num">${n || '<span class="muted">0</span>'}</td>`).join('')}<td class="r num"><b>${vs.length}</b></td></tr>`;
           }).join('')}</tbody></table></div>
-      </section>` : ''}
-      <section class="panel">
-        <div class="panel-head"><h2>Mais vendidos</h2>
-          <div class="legend"><span><i class="c-tiktok"></i>TikTok Shop${conta ? ' (' + esc(conta) + ')' : ''}</span>${conta ? '' : '<span><i class="c-loja"></i>Loja física</span>'}</div></div>
-        ${vendidos.length ? grafico(vendidos.map((d) => ({ label: rot(d.p), titulo: rotulo(d.p), segs: [
-          { v: d.tik, cls: 'c-tiktok', nome: 'TikTok Shop' },
-          ...(conta ? [] : [{ v: d.p.vendasLoja, cls: 'c-loja', nome: 'Loja física' }])] }))) : '<p class="muted">Sem vendas registradas.</p>'}
-      </section>
-      <p class="muted" style="font-size:.85rem">As vendas são exemplos. Na versão final, as do TikTok Shop chegam pela API e as da loja física são registradas no sistema.</p>`);
+      </section>` : ''}`);
 
     const desenharNunca = () => {
       const vis = nunca.slice(0, limiteNunca);
@@ -802,10 +785,10 @@
     const desenharGrafico = () => {
       const linhas = ativos().map((u) => {
         const vs = state.videos.filter((v) => v.usuarioId === u.id && (!contaSel || v.conta === contaSel) && dentroDe(v.data, periodoAdmin));
-        return { u, n: vs.length, views: vs.reduce((a, v) => a + (v.visualizacoes || 0), 0) };
+        return { u, n: vs.length };
       }).sort((a, b) => b.n - a.n);
       $('#graf-usuarios').innerHTML = grafico(linhas.map((l) => ({
-        label: `<b>${esc(l.u.nome)}</b>`, titulo: `${l.u.nome}, ${fmtN(l.views)} visualizações`,
+        label: `<b>${esc(l.u.nome)}</b>`, titulo: l.u.nome,
         segs: [{ v: l.n, cls: 'c-denim', nome: 'Vídeos' }] })));
       $$('[data-per]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.per === periodoAdmin)));
     };

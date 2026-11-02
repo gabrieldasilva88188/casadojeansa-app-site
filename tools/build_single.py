@@ -8,7 +8,7 @@ estoque_js = (raiz / "js" / "estoque.js").read_text(encoding="utf-8")
 data_js = (raiz / "js" / "data.js").read_text(encoding="utf-8")
 app_js = (raiz / "js" / "app.js").read_text(encoding="utf-8")
 
-html = f"""<title>Casa do Jeans</title>
+html = f"""<title>Gerenciador de Estoque e Vídeos</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&display=swap">
 <style>
