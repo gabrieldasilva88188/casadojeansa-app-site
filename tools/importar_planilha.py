@@ -1,6 +1,10 @@
-"""Importa a planilha de controle de estoque da loja para js/estoque.js.
+"""Importa a planilha de controle de estoque da loja.
 
 Uso: python3 tools/importar_planilha.py caminho/da/planilha.xlsx
+
+Gera dois arquivos:
+- js/estoque.js      produtos para o protótipo
+- supabase/seed.sql  carga inicial do banco (contas do TikTok, fabricantes e produtos)
 
 Colunas lidas da aba ESTOQUE (a partir da linha 3):
 LOCAL | N° PRAT | DESCRIÇÃO PRODUTO | QTD PEÇAS | FABRICANTE
@@ -20,6 +24,44 @@ def limpar(v):
         return ""
     s = re.sub(r"\s+", " ", str(v)).strip().strip("]").strip()
     return "" if s in {".", "=", "-"} else s
+
+
+CONTAS_TIKTOK = ["OFICIAL", "RICARDO", "SHAMA", "SR LORD", "IMAGINARIUM"]
+
+
+def sql_txt(v):
+    return "'" + v.replace("'", "''") + "'"
+
+
+def gerar_seed(produtos, destino):
+    fabricantes = sorted({p["fabricante"] for p in produtos if p["fabricante"]})
+    linhas = [
+        "-- Gerado por tools/importar_planilha.py a partir da planilha ESTOQUE da loja.",
+        "-- Carga inicial: contas do TikTok, fabricantes e produtos.",
+        "-- O ID de cada produto segue a ordem da planilha (#0001 = primeira linha).",
+        "begin;",
+        "",
+        "insert into public.contas_tiktok (nome, ordem) values",
+        ",\n".join(f"  ({sql_txt(c)}, {i + 1})" for i, c in enumerate(CONTAS_TIKTOK)),
+        "on conflict (nome) do nothing;",
+        "",
+        "insert into public.fabricantes (nome) values",
+        ",\n".join(f"  ({sql_txt(f)})" for f in fabricantes),
+        "on conflict (nome) do nothing;",
+        "",
+        "insert into public.produtos (id, local, prateleira, descricao, quantidade, fabricante_id) values",
+    ]
+    valores = []
+    for i, p in enumerate(produtos, start=1):
+        fab = f"(select id from public.fabricantes where nome = {sql_txt(p['fabricante'])})" if p["fabricante"] else "null"
+        valores.append(f"  ({i}, {p['local']}, {sql_txt(p['prateleira'])}, {sql_txt(p['descricao'])}, {p['quantidade']}, {fab})")
+    linhas += [",\n".join(valores), "on conflict (prateleira) do nothing;", "",
+               "-- Próximo produto cadastrado no sistema continua a numeração",
+               "select setval(pg_get_serial_sequence('public.produtos', 'id'), (select max(id) from public.produtos));",
+               "", "commit;", ""]
+    destino.parent.mkdir(exist_ok=True)
+    destino.write_text("\n".join(linhas), encoding="utf-8")
+    print(f"{len(fabricantes)} fabricantes e {len(produtos)} produtos -> {destino}")
 
 
 def main():
@@ -62,6 +104,7 @@ def main():
         encoding="utf-8",
     )
     print(f"{len(produtos)} produtos, {sum(p['quantidade'] for p in produtos)} peças -> {saida}")
+    gerar_seed(produtos, saida.parent.parent / "supabase" / "seed.sql")
 
 
 if __name__ == "__main__":

@@ -8,7 +8,7 @@ Protótipo navegável do site, feito para apresentar ao cliente. Ainda **não te
 - **ID dos produtos**: criado automaticamente, em sequência (#0001, #0002...).
 - **Contas do TikTok**: OFICIAL, RICARDO, SHAMA, SR LORD e IMAGINARIUM, como na planilha.
 
-Para atualizar o estoque a partir de uma planilha nova: `python3 tools/importar_planilha.py ESTOQUE.xlsx` (gera `js/estoque.js`).
+Para atualizar o estoque a partir de uma planilha nova: `python3 tools/importar_planilha.py ESTOQUE.xlsx` (gera `js/estoque.js` e `supabase/seed.sql`).
 
 ## Como abrir
 
@@ -37,13 +37,23 @@ styles.css            visual (tema claro e escuro, layout de celular com navega�
 js/estoque.js         produtos importados da planilha da loja
 js/data.js            contas do TikTok, equipe e vídeos de exemplo
 js/app.js             telas, navegação e regras do protótipo
-tools/importar_planilha.py importa a planilha ESTOQUE.xlsx para js/estoque.js
+tools/importar_planilha.py importa a planilha ESTOQUE.xlsx para js/estoque.js e supabase/seed.sql
 tools/build_single.py gera dist/prototipo.html, versão em arquivo único para demonstração
+tools/testar_banco.sh  testa o banco num PostgreSQL temporário
+supabase/migrations/   esquema do banco (tabelas, segurança, gatilhos e views)
+supabase/seed.sql      carga inicial: contas do TikTok, fabricantes e produtos da planilha
+supabase/definir_admins_fixos.sql  torna Ricardo e Márcio admins master fixos
+docs/banco-de-dados.md diagrama e explicação do banco
 ```
+
+## Banco de dados
+
+O banco já está modelado para o Supabase. Veja o diagrama, as regras e o passo a passo de
+instalação em [docs/banco-de-dados.md](docs/banco-de-dados.md).
 
 ## Próximos passos
 
-1. Criar o projeto no **Supabase** (login, banco PostgreSQL, permissões de admin/colaborador).
+1. Criar o projeto no **Supabase** e aplicar o esquema e a carga inicial ([docs/banco-de-dados.md](docs/banco-de-dados.md)).
 2. Trocar `js/data.js` pelas chamadas ao banco; cada "salvar" do `app.js` vira uma gravação.
 3. Migrar as telas para React (Vite ou Next.js) reaproveitando o visual deste protótipo.
 4. Criar o app no **TikTok Shop Partner Center** (tipo Custom) e a sincronização de pedidos e desempenho de vídeos.
