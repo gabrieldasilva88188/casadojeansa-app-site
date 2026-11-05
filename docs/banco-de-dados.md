@@ -8,6 +8,8 @@ e [`supabase/migrations/20261105000000_vendas.sql`](../supabase/migrations/20261
 
 ## Diagrama
 
+Versão em imagem para compartilhar: [diagrama-banco.png](diagrama-banco.png).
+
 ```mermaid
 erDiagram
   AUTH_USERS ||--|| PERFIS : "login de"
