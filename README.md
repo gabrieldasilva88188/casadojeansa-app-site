@@ -10,6 +10,14 @@ Protótipo navegável do site, feito para apresentar ao cliente. Ainda **não te
 
 Para atualizar o estoque a partir de uma planilha nova: `python3 tools/importar_planilha.py ESTOQUE.xlsx` (gera `js/estoque.js` e `supabase/seed.sql`).
 
+## No ar
+
+- **Site:** https://gerenciador-estoque-videos.vercel.app (Vercel, publica sozinho a cada envio para a branch `main`)
+- **Banco:** projeto `gerenciador-estoque-videos` no Supabase, região São Paulo, já com as tabelas e os 239 produtos
+
+O site publicado ainda é o protótipo (dados de exemplo salvos no navegador). O próximo passo é
+ligar as telas ao banco do Supabase.
+
 ## Como abrir
 
 Não precisa instalar nada: abra o `index.html` no navegador. Para publicar, ative o **GitHub Pages** no repositório (Settings → Pages → branch `main`, pasta raiz).
