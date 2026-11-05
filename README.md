@@ -4,7 +4,7 @@ Protótipo navegável do site, feito para apresentar ao cliente. Ainda **não te
 
 - **Produtos**: os 239 itens reais da planilha de estoque da loja (local, nº da prateleira, descrição, quantidade de peças e fabricante).
 - **Equipe**: Ricardo Ronery e Márcio House (admins master fixos), Ketlin Raiane, Mariana Cesar, Gustavo Fialho, Dil Ferreira e Nicoli Nayara. Os e-mails são de exemplo.
-- **Vídeos**: exemplos para a demonstração.
+- **Vídeos e vendas**: exemplos para a demonstração.
 - **ID dos produtos**: criado automaticamente, em sequência (#0001, #0002...).
 - **Contas do TikTok**: OFICIAL, RICARDO, SHAMA, SR LORD e IMAGINARIUM, como na planilha.
 
@@ -22,10 +22,11 @@ Na tela de login há três atalhos de demonstração: **Admin master (Ricardo)**
 |---|---|---|
 | Login | `#login` | Entrar com e-mail e senha ou com um perfil de demonstração |
 | Cadastro | `#cadastro` | Criar conta de colaborador |
-| Produtos | `#produtos` | Busca e filtros por local, prateleira, fabricante e conta do TikTok; vídeos e último vídeo de cada peça |
+| Produtos | `#produtos` | Busca e filtros por local, prateleira, fabricante e conta do TikTok; vídeos e último vídeo de cada peça; botão para abrir a peça no TikTok Shop quando o link está cadastrado |
 | Adicionar produto | `#produto-novo` | Local, nº da prateleira, descrição, peças, fabricante e link (opcional); o ID é automático |
 | Editar produto | `#produto-editar` | Pergunta "Tem certeza das edições feitas?" com a lista do que muda; se a descrição mudar, confirma o link |
 | Vídeos | `#videos` | Registrar vídeo com produto e conta do TikTok; data e hora do sistema gravadas automaticamente |
+| Vendas | `#vendas` | Só admin master. Escolhe a conta do TikTok Shop e lança as peças vendidas de cada produto; gráfico de mais e menos vendidos, vídeos x vendas, filtros por conta, mês e semana; editar e excluir vendas |
 | Análise | `#analise` | Peças com mais vídeos, há mais tempo sem vídeo, nunca tiveram vídeo, vídeos por conta e semana |
 | Admin master | `#admin` | Vídeos por pessoa, equipe (mudar cargo para admin, excluir conta; Ricardo e Márcio são fixos) e registros de tudo o que foi feito |
 

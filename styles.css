@@ -326,6 +326,23 @@ table.semanas td, table.semanas th { white-space: nowrap; }
 tr.apagado td { opacity: .4; }
 .page-head > select.input { width: auto; }
 
+/* ---------- Vendas ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: inherit; font-weight: 700; font-stretch: 85%; font-size: .9rem; letter-spacing: .02em;
+  padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.chip:hover { border-color: var(--btn); }
+.chip[aria-checked="true"] { background: var(--btn); border-color: var(--btn); color: #fff; }
+#vendas-analise { display: flex; flex-direction: column; gap: 28px; }
+.filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 16px; }
+.seg-wrap { flex-wrap: wrap; }
+table.semanas th.sel, table.semanas td.sel { background: var(--line-soft); }
+.btn-tiktok span { font-size: .82rem; }
+.modal-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.modal { max-height: calc(100vh - 32px); overflow-y: auto; }
+
 /* ---------- Tabelas viram cartões no celular ---------- */
 .curto { display: none; }
 @media (max-width: 720px) {

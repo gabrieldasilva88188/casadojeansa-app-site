@@ -330,6 +330,23 @@ table.semanas td, table.semanas th { white-space: nowrap; }
 tr.apagado td { opacity: .4; }
 .page-head > select.input { width: auto; }
 
+/* ---------- Vendas ---------- */
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  font: inherit; font-weight: 700; font-stretch: 85%; font-size: .9rem; letter-spacing: .02em;
+  padding: 8px 14px; border-radius: 999px; cursor: pointer;
+  border: 1.5px solid var(--line); background: var(--surface); color: var(--ink);
+}
+.chip:hover { border-color: var(--btn); }
+.chip[aria-checked="true"] { background: var(--btn); border-color: var(--btn); color: #fff; }
+#vendas-analise { display: flex; flex-direction: column; gap: 28px; }
+.filtros { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: space-between; padding: 16px; }
+.seg-wrap { flex-wrap: wrap; }
+table.semanas th.sel, table.semanas td.sel { background: var(--line-soft); }
+.btn-tiktok span { font-size: .82rem; }
+.modal-form { display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; }
+.modal { max-height: calc(100vh - 32px); overflow-y: auto; }
+
 /* ---------- Tabelas viram cartões no celular ---------- */
 .curto { display: none; }
 @media (max-width: 720px) {
@@ -665,7 +682,7 @@ window.ESTOQUE = [
 <script>
 // Dados do protótipo.
 // - Produtos: vêm da planilha de estoque da loja (js/estoque.js).
-// - Vídeos: EXEMPLOS gerados aqui só para a demonstração.
+// - Vídeos e vendas: EXEMPLOS gerados aqui só para a demonstração.
 // Na versão final, tudo vem do banco (Supabase).
 
 window.SEED = (function () {
@@ -740,6 +757,26 @@ window.SEED = (function () {
   }
   videos.sort((a, b) => b.data.localeCompare(a.data));
 
+  // Vendas de exemplo (lançadas pelo admin): muitas peças com vídeo vendem nos dias seguintes
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const vendas = [];
+  videos.forEach((v) => {
+    if (rnd() < 0.45) return;
+    const d = new Date(v.data);
+    d.setDate(d.getDate() + Math.floor(rnd() * 3));
+    if (d > hoje) d.setTime(hoje.getTime());
+    vendas.push({
+      id: 's' + (vendas.length + 1),
+      produtoId: v.produtoId,
+      conta: v.conta,
+      quantidade: 1 + Math.floor(rnd() * rnd() * 5),
+      data: ymd(d),
+      criadoPor: rnd() < 0.6 ? 'u1' : 'u2',
+      criadoEm: d.toISOString()
+    });
+  });
+  vendas.sort((a, b) => b.data.localeCompare(a.data) || b.criadoEm.localeCompare(a.criadoEm));
+
   const pp = (prat) => produtos.find((p) => p.prateleira === prat) || produtos[0];
   const rot = (prat) => `${prat} ${pp(prat).descricao}`;
   const registros = [
@@ -751,7 +788,7 @@ window.SEED = (function () {
     { usuarioId: 'u1', acao: 'Importou planilha', detalhe: `${produtos.length} produtos da planilha ESTOQUE`, data: CADASTRO }
   ].map((r) => ({ ...r, data: new Date(r.data).toISOString() }));
 
-  return { contas, usuarios, produtos, videos, registros };
+  return { contas, usuarios, produtos, videos, vendas, registros };
 })();
 
 </script>
@@ -762,7 +799,7 @@ window.SEED = (function () {
 (function () {
   'use strict';
 
-  const KEY = 'gev-prototipo-v4';
+  const KEY = 'gev-prototipo-v5';
   const POR_PAGINA = 40;
 
   // ---------- Estado ----------
@@ -846,7 +883,8 @@ window.SEED = (function () {
     busca: ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
     link: ic('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     alerta: ic('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'),
-    relogio: ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>')
+    relogio: ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    vendas: ic('<path d="M3 5h2l2.2 10.5a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 8H6.2"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="16.5" cy="19.5" r="1.3"/>')
   };
 
   // ---------- Roteamento por hash (#produtos, #analise ...) ----------
@@ -906,7 +944,7 @@ window.SEED = (function () {
       ['videos', 'Vídeos', ICON.videos],
       ['analise', 'Análise', ICON.analise]
     ];
-    if (u.papel === 'admin') itens.push(['admin', 'Admin', ICON.admin]);
+    if (u.papel === 'admin') itens.push(['vendas', 'Vendas', ICON.vendas], ['admin', 'Admin', ICON.admin]);
     const links = itens.map(([r, n, i]) =>
       `<a href="#${r}" ${ativo === r ? 'aria-current="page"' : ''}>${i}<span>${n}</span></a>`).join('');
     app.innerHTML = `
@@ -920,7 +958,7 @@ window.SEED = (function () {
               <span class="who"><b>${esc(u.nome)}</b><span>${u.papel === 'admin' ? 'Admin master' : 'Colaborador'}</span></span>
             </div>
             <button class="link-btn" data-acao="sair" type="button">Sair</button>
-            <p class="proto-note">Protótipo. Estoque da planilha da loja; os vídeos são exemplos.</p>
+            <p class="proto-note">Protótipo. Estoque da planilha da loja; vídeos e vendas são exemplos.</p>
           </div>
         </aside>
         <div class="topbar-wrap">
@@ -1104,7 +1142,7 @@ window.SEED = (function () {
               <td class="r num hide-sm" data-label="${tituloVid}">${nv}</td>
               <td class="hide-sm" data-label="Último vídeo">${ult ? dias(diasDesde(ult)) : '<span class="sem-video">nenhum</span>'}</td>
               <td class="hide-sm c-acoes"><div class="row-actions">
-                ${p.link ? `<a class="btn btn-ghost btn-sm hide-sm" href="${esc(p.link)}" target="_blank" rel="noopener" aria-label="Abrir ${esc(p.prateleira)} no TikTok Shop">${ICON.link}</a>` : ''}
+                ${p.link ? `<a class="btn btn-ghost btn-sm btn-tiktok" href="${esc(p.link)}" target="_blank" rel="noopener" aria-label="Abrir ${esc(p.prateleira)} no TikTok Shop">${ICON.link}<span>TikTok Shop</span></a>` : ''}
                 <button class="btn btn-ghost btn-sm" type="button" data-editar="${p.id}">Editar</button>
               </div></td></tr>`;
           }).join('')}</tbody></table></div>
@@ -1370,8 +1408,7 @@ window.SEED = (function () {
     $('#f-video').addEventListener('submit', (e) => {
       e.preventDefault();
       const txt = $('#v-prod').value.trim();
-      const prat = txt.split(/\s+-\s+|\s+/)[0].toUpperCase();
-      const p = state.produtos.find((x) => x.prateleira + ' - ' + descricao(x) === txt) || state.produtos.find((x) => x.prateleira === prat);
+      const p = txt ? acharProduto(txt) : null;
       const conta = $('#v-conta').value;
       const erros = {};
       if (!txt) erros.prod = 'Escolha o produto que aparece no vídeo.';
@@ -1501,6 +1538,286 @@ window.SEED = (function () {
     const am = $('#a-mes'); if (am) am.addEventListener('change', (e) => { mesAnalise = e.target.value; render(); });
   };
 
+  // ---------- Vendas (só admin master) ----------
+  // O TikTok não exporta as vendas por vídeo: o admin lança aqui, por conta, produto e dia.
+  const ymdLocal = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const fmtDia = (ymd) => ymd.split('-').reverse().join('/');
+  const semanaDoDia = (dia) => SEMANAS.findIndex(([a, b]) => dia >= a && dia <= b) + 1;
+  const nomeMes = (m) => new Date(m + '-15T12:00:00').toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  function acharProduto(txt) {
+    const prat = txt.split(/\s+-\s+|\s+/)[0].toUpperCase();
+    return state.produtos.find((x) => x.prateleira + ' - ' + descricao(x) === txt) || state.produtos.find((x) => x.prateleira === prat);
+  }
+  const opcoesProduto = () => [...state.produtos].sort(ordemPrat)
+    .map((p) => `<option value="${esc(p.prateleira + ' - ' + descricao(p))}">`).join('');
+
+  const V = { conta: '', mes: null, semana: 0, ordem: 'mais', limite: 15, contaForm: '' };
+
+  PAGINAS.vendas = function () {
+    if (eu().papel !== 'admin') {
+      shell('vendas', `<div class="page-head"><div><h1>Vendas</h1></div></div>
+        <div class="notice">${ICON.alerta}<span>Esta área é só para o admin master.</span></div>`);
+      return;
+    }
+    if (!state.vendas) state.vendas = [];
+    const hoje = ymdLocal(agora());
+    const meses = [...new Set([hoje.slice(0, 7), ...state.vendas.map((v) => v.data.slice(0, 7))])].sort().reverse();
+    if (!V.mes || !meses.includes(V.mes)) V.mes = meses.find((m) => state.vendas.some((v) => v.data.startsWith(m))) || meses[0];
+
+    shell('vendas', `
+      <div class="page-head"><div><h1>Vendas</h1>
+        <p>Lance as peças vendidas em cada conta do TikTok Shop e compare com os vídeos gravados.</p></div></div>
+
+      <form id="f-venda" class="panel form-panel" novalidate>
+        <div class="panel-head"><h2>Adicionar venda</h2></div>
+        <div class="field">
+          <span class="label-like" id="lbl-conta">Conta do TikTok Shop</span>
+          <div class="chips" role="radiogroup" aria-labelledby="lbl-conta">
+            ${state.contas.map((c) => `<button type="button" class="chip" role="radio" aria-checked="${V.contaForm === c}" data-conta-form="${esc(c)}">${esc(c)}</button>`).join('')}
+          </div>
+          <span class="err" id="err-conta"></span>
+        </div>
+        <div class="grid-form" style="margin-top:18px">
+          <div class="field span-2"><label for="s-prod">Produto vendido</label>
+            <input class="input" id="s-prod" list="lista-prod-v" placeholder="Digite a prateleira (ex.: A1) ou parte da descrição" autocomplete="off">
+            <datalist id="lista-prod-v">${opcoesProduto()}</datalist>
+            <span class="err" data-err="prod"></span></div>
+          <div class="field"><label for="s-qtd">Peças vendidas</label>
+            <input class="input num" id="s-qtd" type="number" min="1" step="1" inputmode="numeric" value="1">
+            <span class="err" data-err="qtd"></span></div>
+          <div class="field"><label for="s-data">Data da venda</label>
+            <input class="input" id="s-data" type="date" value="${hoje}" max="${hoje}">
+            <span class="err" data-err="data"></span></div>
+        </div>
+        <div class="form-actions" style="margin-top:22px"><button class="btn" type="submit">Adicionar venda</button></div>
+      </form>
+
+      <section class="filtros panel">
+        <div class="toolbar">
+          ${seletorConta('s-f-conta')}
+          <select class="input" id="s-f-mes" aria-label="Mês">${meses.map((m) => `<option value="${m}" ${m === V.mes ? 'selected' : ''}>${nomeMes(m)}</option>`).join('')}</select>
+        </div>
+        <div class="seg-toggle seg-wrap" role="group" aria-label="Semana do mês">
+          <button type="button" data-sem="0">Mês inteiro</button>
+          ${SEMANAS.map((s, i) => `<button type="button" data-sem="${i + 1}">${rotSemana(s)}</button>`).join('')}
+        </div>
+      </section>
+      <div id="vendas-analise"></div>
+      <section>
+        <div class="panel-head"><div><h2>Vendas lançadas</h2><p id="vendas-sub"></p></div></div>
+        <div id="lista-vendas"></div>
+      </section>`);
+    $('#s-f-conta').value = V.conta;
+
+    // período selecionado (mês + semana opcional + conta)
+    const noPeriodo = (ymd, conta) => ymd.slice(0, 7) === V.mes &&
+      (!V.semana || semanaDoDia(+ymd.slice(8, 10)) === V.semana) && (!V.conta || conta === V.conta);
+    const periodoTxt = () => `${V.semana ? 'Semana ' + rotSemana(SEMANAS[V.semana - 1]) + ' de ' : ''}${nomeMes(V.mes)}${V.conta ? ', conta ' + V.conta : ''}`;
+
+    const desenhar = () => {
+      $$('[data-sem]').forEach((b) => b.setAttribute('aria-pressed', String(+b.dataset.sem === V.semana)));
+      const vendas = state.vendas.filter((v) => noPeriodo(v.data, v.conta));
+      const videos = state.videos.filter((v) => noPeriodo(ymdLocal(new Date(v.data)), v.conta));
+      const porProduto = new Map();
+      const linha = (pid) => porProduto.get(pid) || porProduto.set(pid, { p: produto(pid), pecas: 0, videos: 0 }).get(pid);
+      vendas.forEach((v) => { linha(v.produtoId).pecas += v.quantidade; });
+      videos.forEach((v) => { linha(v.produtoId).videos += 1; });
+      const dados = [...porProduto.values()].filter((d) => d.p);
+      const totPecas = vendas.reduce((a, v) => a + v.quantidade, 0);
+      const rot = (p) => `<b>${esc(p.prateleira)}</b>${esc(descricao(p))}`;
+
+      const ranking = V.ordem === 'mais'
+        ? dados.filter((d) => d.pecas > 0).sort((a, b) => b.pecas - a.pecas || b.videos - a.videos).slice(0, 10)
+        : dados.filter((d) => d.videos > 0).sort((a, b) => a.pecas - b.pecas || b.videos - a.videos).slice(0, 10);
+      const cruz = dados.filter((d) => d.videos > 0).sort((a, b) => b.videos - a.videos || a.pecas - b.pecas).slice(0, 8);
+
+      $('#vendas-analise').innerHTML = `
+        <div class="stats">
+          <div class="stat"><span class="v">${fmtN(totPecas)}</span><span class="l">peças vendidas</span></div>
+          <div class="stat"><span class="v">${dados.filter((d) => d.pecas).length}</span><span class="l">produtos vendidos</span></div>
+          <div class="stat"><span class="v">${videos.length}</span><span class="l">vídeos postados</span></div>
+          <div class="stat"><span class="v">${videos.length ? (totPecas / videos.length).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) : '0'}</span><span class="l">peças vendidas por vídeo</span></div>
+        </div>
+        <div class="two-col">
+          <section class="panel">
+            <div class="panel-head"><div><h2>${V.ordem === 'mais' ? 'Mais vendidos' : 'Menos vendidos'}</h2>
+              <p>${V.ordem === 'mais' ? 'Peças vendidas por produto.' : 'Peças com vídeo no período que menos venderam.'}</p></div>
+              <div class="seg-toggle" role="group" aria-label="Ordem">
+                <button type="button" data-ordem="mais" aria-pressed="${V.ordem === 'mais'}">Mais</button>
+                <button type="button" data-ordem="menos" aria-pressed="${V.ordem === 'menos'}">Menos</button>
+              </div></div>
+            ${ranking.length ? grafico(ranking.map((d) => ({ label: rot(d.p), titulo: rotulo(d.p),
+              valor: fmtN(d.pecas), segs: [{ v: d.pecas, cls: 'c-tiktok', nome: 'Peças vendidas' }] })))
+              : `<p class="muted">${V.ordem === 'mais' ? 'Nenhuma venda lançada nesse período.' : 'Nenhuma peça com vídeo nesse período.'}</p>`}
+          </section>
+          <section class="panel">
+            <div class="panel-head"><div><h2>Vídeos x vendas</h2><p>Peças com mais vídeos no período e quanto venderam.</p></div></div>
+            ${cruz.length ? `<ul class="rank">${cruz.map((d) => `<li><span>${rot(d.p).replace('</b>', '</b> ')}</span>
+              <span class="n">${plural(d.videos, 'vídeo', 'vídeos')}, <span class="${d.pecas ? '' : 'zero'}">${d.pecas ? plural(d.pecas, 'peça', 'peças') : 'sem venda'}</span></span></li>`).join('')}</ul>`
+              : '<p class="muted">Nenhum vídeo nesse período.</p>'}
+          </section>
+        </div>
+        <section>
+          <div class="panel-head"><div><h2>Peças vendidas por conta e semana</h2><p>${esc(nomeMes(V.mes))}, no formato da planilha.</p></div></div>
+          <div class="table-wrap"><table class="semanas">
+            <thead><tr><th>Conta</th>${SEMANAS.map((s, i) => `<th class="r ${V.semana === i + 1 ? 'sel' : ''}"><span class="longo">${rotSemana(s)}</span><span class="curto">${s[0]}–${s[1]}</span></th>`).join('')}<th class="r">Total</th></tr></thead>
+            <tbody>${state.contas.map((c) => {
+              const vs = state.vendas.filter((v) => v.conta === c && v.data.slice(0, 7) === V.mes);
+              const porSem = SEMANAS.map((s, i) => vs.filter((v) => semanaDoDia(+v.data.slice(8, 10)) === i + 1).reduce((a, v) => a + v.quantidade, 0));
+              return `<tr class="${V.conta && V.conta !== c ? 'apagado' : ''}"><td class="code">${esc(c)}</td>${porSem.map((n, i) => `<td class="r num ${V.semana === i + 1 ? 'sel' : ''}">${n || '<span class="muted">0</span>'}</td>`).join('')}<td class="r num"><b>${vs.reduce((a, v) => a + v.quantidade, 0)}</b></td></tr>`;
+            }).join('')}</tbody></table></div>
+        </section>`;
+      $$('[data-ordem]').forEach((b) => b.addEventListener('click', () => { V.ordem = b.dataset.ordem; desenhar(); }));
+
+      // Lista
+      $('#vendas-sub').textContent = `${periodoTxt()}: ${plural(vendas.length, 'lançamento', 'lançamentos')}.`;
+      const vis = vendas.slice(0, V.limite);
+      $('#lista-vendas').innerHTML = vis.length ? `
+        <div class="table-wrap"><table class="cards">
+          <thead><tr><th>Data</th><th>Produto</th><th>Conta</th><th class="r">Peças</th><th class="hide-sm">Lançado por</th><th class="r hide-sm">Ações</th></tr></thead>
+          <tbody>${vis.map((v) => { const p = produto(v.produtoId) || { prateleira: '?', descricao: 'Produto removido', num: 0 }; return `<tr>
+            <td class="num nowrap" data-label="Data">${fmtDia(v.data)}</td>
+            <td class="prod c-titulo"><span><b>${esc(p.prateleira)}</b> ${esc(descricao(p))}</span><span class="id">ID ${idTxt(p)}</span></td>
+            <td data-label="Conta"><span class="conta">${esc(v.conta)}</span></td>
+            <td class="r num" data-label="Peças"><b>${v.quantidade}</b></td>
+            <td class="hide-sm" data-label="Lançado por">${esc(nomeDe(v.criadoPor))}</td>
+            <td class="hide-sm c-acoes"><div class="row-actions">
+              <button class="btn btn-ghost btn-sm" type="button" data-editar-venda="${v.id}">Editar</button>
+              <button class="btn btn-danger-ghost btn-sm" type="button" data-excluir-venda="${v.id}">Excluir</button>
+            </div></td></tr>`; }).join('')}</tbody></table></div>
+        ${vendas.length > V.limite ? `<p style="margin-top:14px"><button class="btn btn-ghost btn-sm" type="button" id="mais-vendas">Mostrar mais ${Math.min(15, vendas.length - V.limite)} de ${vendas.length - V.limite}</button></p>` : ''}`
+        : '<div class="table-wrap"><p class="empty">Nenhuma venda lançada nesse período. Use o formulário acima para adicionar.</p></div>';
+      const m = $('#mais-vendas'); if (m) m.addEventListener('click', () => { V.limite += 15; desenhar(); });
+    };
+    desenhar();
+
+    // filtros
+    $('#s-f-conta').addEventListener('change', (e) => { V.conta = e.target.value; V.limite = 15; desenhar(); });
+    $('#s-f-mes').addEventListener('change', (e) => { V.mes = e.target.value; V.limite = 15; desenhar(); });
+    $$('[data-sem]').forEach((b) => b.addEventListener('click', () => { V.semana = +b.dataset.sem; V.limite = 15; desenhar(); }));
+
+    // escolha da conta no formulário
+    $$('[data-conta-form]').forEach((b) => b.addEventListener('click', () => {
+      V.contaForm = b.dataset.contaForm;
+      $$('[data-conta-form]').forEach((x) => x.setAttribute('aria-checked', String(x === b)));
+      $('#err-conta').textContent = '';
+    }));
+
+    // adicionar
+    $('#f-venda').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const r = lerVenda({ prod: '#s-prod', qtd: '#s-qtd', data: '#s-data', conta: V.contaForm }, '#f-venda');
+      if (!r) return;
+      state.vendas.unshift({ id: novoId('s'), produtoId: r.p.id, conta: r.conta, quantidade: r.qtd, data: r.data,
+        criadoPor: state.sessao, criadoEm: agora().toISOString() });
+      state.vendas.sort((a, b) => b.data.localeCompare(a.data) || b.criadoEm.localeCompare(a.criadoEm));
+      registrar('Adicionou venda', `${r.qtd} peça(s) de ${rotulo(r.p)} na conta ${r.conta} em ${fmtDia(r.data)}`);
+      save();
+      toast('Venda adicionada');
+      V.mes = r.data.slice(0, 7); V.conta = ''; V.semana = 0;
+      render();
+    });
+
+    // editar / excluir
+    $('#lista-vendas').addEventListener('click', (e) => {
+      const be = e.target.closest('[data-editar-venda]');
+      const bx = e.target.closest('[data-excluir-venda]');
+      if (be) editarVenda(state.vendas.find((v) => v.id === be.dataset.editarVenda), desenhar);
+      if (bx) excluirVenda(state.vendas.find((v) => v.id === bx.dataset.excluirVenda), desenhar);
+    });
+  };
+
+  // Lê e valida os campos de uma venda (usado ao adicionar e ao editar)
+  function lerVenda(sel, raiz) {
+    const txt = $(sel.prod).value.trim();
+    const p = txt ? acharProduto(txt) : null;
+    const qtd = $(sel.qtd).value.trim();
+    const data = $(sel.data).value;
+    const conta = sel.conta;
+    const hoje = ymdLocal(agora());
+    const erros = {};
+    if (!txt) erros.prod = 'Escolha o produto vendido.';
+    else if (!p) erros.prod = 'Não achamos esse produto. Digite o nº da prateleira, como A1, e escolha da lista.';
+    if (!/^\d+$/.test(qtd) || +qtd < 1) erros.qtd = 'Use um número inteiro, 1 ou maior.';
+    if (!data) erros.data = 'Informe a data da venda.';
+    else if (data > hoje) erros.data = 'A data da venda não pode ser no futuro.';
+    $$(`${raiz} [data-err]`).forEach((el) => {
+      el.textContent = erros[el.dataset.err] || '';
+      const inp = el.parentElement.querySelector('.input'); if (inp) inp.setAttribute('aria-invalid', erros[el.dataset.err] ? 'true' : 'false');
+    });
+    const errConta = $(`${raiz} #err-conta`) || $(`${raiz} [data-err-conta]`);
+    if (!conta && errConta) errConta.textContent = 'Escolha a conta onde a venda aconteceu.';
+    if (Object.keys(erros).length || !conta) {
+      const f = $(`${raiz} [aria-invalid="true"]`); if (f) f.focus();
+      return null;
+    }
+    return { p, qtd: +qtd, data, conta };
+  }
+
+  function editarVenda(v, depois) {
+    if (!v) return;
+    const p = produto(v.produtoId);
+    const hoje = ymdLocal(agora());
+    abrirModal({
+      titulo: 'Editar venda',
+      corpo: `<div id="f-edv" class="modal-form">
+        <div class="field"><label for="e-conta">Conta do TikTok Shop</label>
+          <select class="input" id="e-conta">${state.contas.map((c) => `<option ${c === v.conta ? 'selected' : ''}>${esc(c)}</option>`).join('')}</select></div>
+        <div class="field"><label for="e-prod">Produto vendido</label>
+          <input class="input" id="e-prod" list="lista-prod-e" value="${p ? esc(p.prateleira + ' - ' + descricao(p)) : ''}" autocomplete="off">
+          <datalist id="lista-prod-e">${opcoesProduto()}</datalist><span class="err" data-err="prod"></span></div>
+        <div class="field"><label for="e-qtd">Peças vendidas</label>
+          <input class="input num" id="e-qtd" type="number" min="1" step="1" inputmode="numeric" value="${v.quantidade}"><span class="err" data-err="qtd"></span></div>
+        <div class="field"><label for="e-data">Data da venda</label>
+          <input class="input" id="e-data" type="date" value="${v.data}" max="${hoje}"><span class="err" data-err="data"></span></div>
+      </div>`,
+      botoes: [
+        { label: 'Salvar alterações', acao: () => {
+          const r = lerVenda({ prod: '#e-prod', qtd: '#e-qtd', data: '#e-data', conta: $('#e-conta').value }, '#f-edv');
+          if (!r) return;
+          const mud = [];
+          if (r.conta !== v.conta) mud.push(['Conta', `${v.conta} → ${r.conta}`]);
+          if (r.p.id !== v.produtoId) mud.push(['Produto', `${p ? p.prateleira : '?'} → ${r.p.prateleira}`]);
+          if (r.qtd !== v.quantidade) mud.push(['Peças', `${v.quantidade} → ${r.qtd}`]);
+          if (r.data !== v.data) mud.push(['Data', `${fmtDia(v.data)} → ${fmtDia(r.data)}`]);
+          if (!mud.length) { fecharModal(); toast('Nada foi alterado'); return; }
+          abrirModal({
+            titulo: 'Tem certeza das edições feitas?', alerta: true,
+            corpo: `<p class="muted">Confira o que vai mudar nesta venda:</p>
+              <ul class="diff">${mud.map(([k, t]) => `<li><b>${k}</b><span>${esc(t)}</span></li>`).join('')}</ul>`,
+            botoes: [
+              { label: 'Sim, salvar edições', acao: () => {
+                Object.assign(v, { conta: r.conta, produtoId: r.p.id, quantidade: r.qtd, data: r.data });
+                registrar('Editou venda', `${rotulo(r.p)}: ${mud.map(([k, t]) => `${k.toLowerCase()} ${t}`).join(', ')}`);
+                state.vendas.sort((a, b) => b.data.localeCompare(a.data) || b.criadoEm.localeCompare(a.criadoEm));
+                save(); fecharModal(); toast('Edições salvas'); depois();
+              } },
+              { label: 'Não, cancelar', cls: 'btn-ghost', acao: () => { fecharModal(); toast('Edição cancelada. Nada foi salvo.'); } }
+            ]
+          });
+        } },
+        { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
+      ]
+    });
+  }
+
+  function excluirVenda(v, depois) {
+    if (!v) return;
+    const p = produto(v.produtoId);
+    abrirModal({
+      titulo: 'Excluir esta venda?', alerta: true,
+      corpo: `<p class="muted">${plural(v.quantidade, 'peça', 'peças')} de ${esc(p ? rotulo(p) : 'produto removido')}, conta ${esc(v.conta)}, em ${fmtDia(v.data)}. A exclusão fica registrada no histórico.</p>`,
+      botoes: [
+        { label: 'Excluir venda', cls: 'btn-red', acao: () => {
+          state.vendas = state.vendas.filter((x) => x.id !== v.id);
+          registrar('Excluiu venda', `${v.quantidade} peça(s) de ${p ? rotulo(p) : 'produto removido'} na conta ${v.conta} em ${fmtDia(v.data)}`);
+          save(); fecharModal(); toast('Venda excluída'); depois();
+        } },
+        { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
+      ]
+    });
+  }
+
   // ---------- Admin master ----------
   let periodoAdmin = 30, filtroUsuario = '', filtroAcao = '', limiteReg = 15;
   PAGINAS.admin = function () {
@@ -1509,7 +1826,7 @@ window.SEED = (function () {
         <div class="notice">${ICON.alerta}<span>Esta área é só para o admin master. Peça acesso ao responsável pela loja.</span></div>`);
       return;
     }
-    const acoes = ['Adicionou produto', 'Editou produto', 'Registrou vídeo', 'Criou conta', 'Alterou cargo', 'Excluiu conta', 'Importou planilha'];
+    const acoes = ['Adicionou produto', 'Editou produto', 'Registrou vídeo', 'Adicionou venda', 'Editou venda', 'Excluiu venda', 'Criou conta', 'Alterou cargo', 'Excluiu conta', 'Importou planilha'];
     shell('admin', `
       <div class="page-head"><div><h1>Admin master</h1><p>Vídeos de cada pessoa, a equipe e tudo o que foi alterado no sistema.</p></div></div>
       <section class="panel">

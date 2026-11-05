@@ -14,6 +14,6 @@ trap '"$BIN/pg_ctl" -D "$DIR/dados" stop -m fast >/dev/null 2>&1 || true; rm -rf
 
 PSQL=(psql -h "$DIR" -p "$PORTA" -U postgres -d postgres -v ON_ERROR_STOP=1 -q)
 "${PSQL[@]}" -f supabase/testes/stubs_supabase.sql
-"${PSQL[@]}" -f supabase/migrations/20261104000000_esquema_inicial.sql
+for m in supabase/migrations/*.sql; do "${PSQL[@]}" -f "$m"; done
 "${PSQL[@]}" -f supabase/seed.sql >/dev/null
 "${PSQL[@]}" -f supabase/testes/testar_regras.sql 2>&1 | sed 's/^psql:[^:]*:[0-9]*: //; s/^NOTICE:  //'

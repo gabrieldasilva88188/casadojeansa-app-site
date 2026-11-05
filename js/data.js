@@ -1,6 +1,6 @@
 // Dados do protótipo.
 // - Produtos: vêm da planilha de estoque da loja (js/estoque.js).
-// - Vídeos: EXEMPLOS gerados aqui só para a demonstração.
+// - Vídeos e vendas: EXEMPLOS gerados aqui só para a demonstração.
 // Na versão final, tudo vem do banco (Supabase).
 
 window.SEED = (function () {
@@ -75,6 +75,26 @@ window.SEED = (function () {
   }
   videos.sort((a, b) => b.data.localeCompare(a.data));
 
+  // Vendas de exemplo (lançadas pelo admin): muitas peças com vídeo vendem nos dias seguintes
+  const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const vendas = [];
+  videos.forEach((v) => {
+    if (rnd() < 0.45) return;
+    const d = new Date(v.data);
+    d.setDate(d.getDate() + Math.floor(rnd() * 3));
+    if (d > hoje) d.setTime(hoje.getTime());
+    vendas.push({
+      id: 's' + (vendas.length + 1),
+      produtoId: v.produtoId,
+      conta: v.conta,
+      quantidade: 1 + Math.floor(rnd() * rnd() * 5),
+      data: ymd(d),
+      criadoPor: rnd() < 0.6 ? 'u1' : 'u2',
+      criadoEm: d.toISOString()
+    });
+  });
+  vendas.sort((a, b) => b.data.localeCompare(a.data) || b.criadoEm.localeCompare(a.criadoEm));
+
   const pp = (prat) => produtos.find((p) => p.prateleira === prat) || produtos[0];
   const rot = (prat) => `${prat} ${pp(prat).descricao}`;
   const registros = [
@@ -86,5 +106,5 @@ window.SEED = (function () {
     { usuarioId: 'u1', acao: 'Importou planilha', detalhe: `${produtos.length} produtos da planilha ESTOQUE`, data: CADASTRO }
   ].map((r) => ({ ...r, data: new Date(r.data).toISOString() }));
 
-  return { contas, usuarios, produtos, videos, registros };
+  return { contas, usuarios, produtos, videos, vendas, registros };
 })();

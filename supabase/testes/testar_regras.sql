@@ -165,6 +165,43 @@ select teste.barrado($$ select * from public.produtos $$, 'visitante sem login n
 reset role;
 
 -- =====================================================================
+-- Vendas (só admin master)
+-- =====================================================================
+select set_config('request.jwt.claim.sub', teste.id_de('ketlin@exemplo.com'), false);
+set role authenticated;
+select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade) values (1, 1, 2) $$,
+  'colaborador não lança venda');
+reset role;
+
+select set_config('request.jwt.claim.sub', teste.id_de('ricardo@exemplo.com'), false);
+set role authenticated;
+insert into public.vendas (produto_id, conta_id, quantidade, vendido_em)
+values (1, (select id from public.contas_tiktok where nome = 'SHAMA'), 3, current_date - 1);
+select teste.confere((select count(*) = 1 and bool_and(criado_por = teste.id_de('ricardo@exemplo.com')::uuid) from public.vendas),
+  'admin lança venda e fica registrado quem lançou');
+update public.vendas set quantidade = 4 where produto_id = 1;
+select teste.confere((select quantidade = 4 from public.vendas where produto_id = 1), 'admin edita venda');
+select teste.confere((select mudancas -> 'quantidade' ->> 'para' = '4' from public.registros
+                      where acao = 'Editou venda' order by id desc limit 1),
+  'edição de venda entra nos registros com o antes e o depois');
+select teste.confere((select sum(pecas_vendidas) = 4 from public.v_vendas_semana where conta = 'SHAMA' and prateleira = 'A1'),
+  'v_vendas_semana: peças vendidas por produto, conta e semana');
+select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade) values (1, 1, 0) $$,
+  'venda precisa ter pelo menos 1 peça');
+select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade, vendido_em) values (1, 1, 1, current_date + 10) $$,
+  'venda não pode ter data no futuro');
+delete from public.vendas where produto_id = 1;
+select teste.confere((select count(*) = 0 from public.vendas) and
+                     (select count(*) = 1 from public.registros where acao = 'Excluiu venda'),
+  'admin exclui venda e a exclusão fica nos registros');
+reset role;
+
+select set_config('request.jwt.claim.sub', teste.id_de('ketlin@exemplo.com'), false);
+set role authenticated;
+select teste.confere((select count(*) = 0 from public.vendas), 'colaborador não vê vendas');
+reset role;
+
+-- =====================================================================
 -- Views de análise
 -- =====================================================================
 select set_config('request.jwt.claim.sub', teste.id_de('ricardo@exemplo.com'), false);
