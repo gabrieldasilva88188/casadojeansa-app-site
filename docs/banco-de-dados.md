@@ -130,11 +130,21 @@ Essas regras valem mesmo que alguém tente burlar o site, porque ficam no própr
 | Toda alteração vai para o histórico, com antes e depois | Gatilho `registrar_alteracao` |
 | "Excluir conta" não apaga a pessoa | O histórico dela continua; `excluido_em` guarda a data |
 
+## Projeto no Supabase
+
+O banco já está criado no Supabase: projeto **gerenciador-estoque-videos**, região São Paulo
+(`sa-east-1`), com as três migrações aplicadas e os 239 produtos carregados. O verificador de
+segurança do Supabase não aponta nenhum problema.
+
+As funções internas (permissões e gatilhos) ficam no schema `privado`, que não é exposto pela
+API; só as tabelas e views do schema `public` são acessíveis, sempre filtradas pelas regras de RLS.
+
 ## Como montar no Supabase
 
 1. Crie um projeto em supabase.com (região **São Paulo**, `sa-east-1`).
 2. Abra **SQL Editor** e rode, nesta ordem, os arquivos da pasta `supabase/migrations/`:
-   `20261104000000_esquema_inicial.sql` e depois `20261105000000_vendas.sql`.
+   `20261104000000_esquema_inicial.sql`, `20261105000000_vendas.sql` e
+   `20261105010000_ajustes_seguranca.sql`.
 3. No mesmo lugar, cole e rode `supabase/seed.sql` (contas, fabricantes e os 239 produtos).
 4. Em **Authentication → Providers**, deixe o login por e-mail e senha ativado.
 5. Peça para o Ricardo e o Márcio criarem a conta pela tela de cadastro do sistema.

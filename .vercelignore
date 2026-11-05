@@ -1,0 +1,6 @@
+# Arquivos que não precisam ir para o site publicado
+supabase/
+tools/
+docs/
+dist/
+*.md

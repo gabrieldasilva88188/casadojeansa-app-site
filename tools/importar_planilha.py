@@ -40,6 +40,8 @@ def gerar_seed(produtos, destino):
         "-- Carga inicial: contas do TikTok, fabricantes e produtos.",
         "-- O ID de cada produto segue a ordem da planilha (#0001 = primeira linha).",
         "begin;",
+        "-- Não registra cada produto no histórico; no fim entra um único registro da importação",
+        "alter table public.produtos disable trigger registrar_produto;",
         "",
         "insert into public.contas_tiktok (nome, ordem) values",
         ",\n".join(f"  ({sql_txt(c)}, {i + 1})" for i, c in enumerate(CONTAS_TIKTOK)),
@@ -58,6 +60,9 @@ def gerar_seed(produtos, destino):
     linhas += [",\n".join(valores), "on conflict (prateleira) do nothing;", "",
                "-- Próximo produto cadastrado no sistema continua a numeração",
                "select setval(pg_get_serial_sequence('public.produtos', 'id'), (select max(id) from public.produtos));",
+               "", "alter table public.produtos enable trigger registrar_produto;",
+               "insert into public.registros (acao, tabela, registro_id, detalhe) values",
+               "  ('Importou planilha', 'produtos', 'planilha', (select count(*) from public.produtos) || ' produtos da planilha ESTOQUE');",
                "", "commit;", ""]
     destino.parent.mkdir(exist_ok=True)
     destino.write_text("\n".join(linhas), encoding="utf-8")
