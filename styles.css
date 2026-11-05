@@ -489,3 +489,14 @@ table.semanas th.sel, table.semanas td.sel { background: var(--line-soft); }
   .btn-copiar .copiar-txt { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
   .btn-grupo .btn-copiar { padding-inline: 14px; }
 }
+
+/* ---------- Período dos vídeos ---------- */
+.seg-n { font-weight: 500; opacity: .75; font-variant-numeric: tabular-nums; }
+.seg-n:empty { display: none; }
+.seg-n::before { content: "("; } .seg-n::after { content: ")"; }
+@media (max-width: 560px) {
+  #fv-periodo { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); width: 100%; }
+  #fv-periodo button { padding-inline: 4px; }
+  #fv-periodo .seg-n { display: block; }
+  #fv-periodo .seg-n::before, #fv-periodo .seg-n::after { content: ""; }
+}

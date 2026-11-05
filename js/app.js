@@ -867,6 +867,16 @@
 
   // ---------- Vídeos ----------
   let filtroVideos = 'meus';
+  // Período da lista de vídeos: hoje, últimos 7 dias, últimos 30 dias ou tudo
+  let periodoVideos = '7';
+  const PERIODOS = [['hoje', 'Hoje'], ['7', '7 dias'], ['30', '30 dias'], ['tudo', 'Tudo']];
+  function noPeriodo(iso, per) {
+    if (per === 'tudo') return true;
+    const ini = agora(); ini.setHours(0, 0, 0, 0);               // começo de hoje
+    if (per !== 'hoje') ini.setDate(ini.getDate() - (Number(per) - 1)); // hoje + os dias anteriores
+    return new Date(iso) >= ini;
+  }
+  const nomePeriodo = { hoje: 'hoje', 7: 'nos últimos 7 dias', 30: 'nos últimos 30 dias', tudo: '' };
   PAGINAS.videos = function () {
     const meus30 = state.videos.filter((v) => v.usuarioId === state.sessao && dentroDe(v.data, 30)).length;
     const opcoes = [...state.produtos].sort(ordemPrat);
@@ -897,6 +907,9 @@
             <div class="seg-toggle" role="group" aria-label="De quem">
               <button type="button" data-fv="meus">Meus</button>
               <button type="button" data-fv="todos">Da equipe</button>
+            </div>
+            <div class="seg-toggle" role="group" aria-label="Período" id="fv-periodo">
+              ${PERIODOS.map(([k, t]) => `<button type="button" data-per="${k}">${t} <span class="seg-n" data-n="${k}"></span></button>`).join('')}
             </div>
             ${seletorConta('fv-conta')}
           </div>
@@ -937,7 +950,11 @@
 
     let limite = 20;
     const desenhar = () => {
-      const lista = state.videos.filter((v) => (filtroVideos === 'todos' || v.usuarioId === state.sessao) && (!contaSel || v.conta === contaSel));
+      const base = state.videos.filter((v) => (filtroVideos === 'todos' || v.usuarioId === state.sessao) && (!contaSel || v.conta === contaSel));
+      const lista = base.filter((v) => noPeriodo(v.data, periodoVideos));
+      // quantos vídeos cada período tem (aparece no botão)
+      PERIODOS.forEach(([k]) => { const el = $(`[data-n="${k}"]`); if (el) el.textContent = base.filter((v) => noPeriodo(v.data, k)).length; });
+      $$('[data-per]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.per === periodoVideos)));
       const vis = lista.slice(0, limite);
       const equipe = filtroVideos === 'todos';
       $('#lista-videos').innerHTML = vis.length ? `
@@ -951,12 +968,15 @@
               </tr>`; }).join('')}
           </tbody></table></div>
         ${lista.length > limite ? `<p style="margin-top:14px"><button class="btn btn-ghost btn-sm" type="button" id="mais-vid">Mostrar mais ${Math.min(20, lista.length - limite)} de ${lista.length - limite}</button></p>` : ''}`
-        : `<div class="table-wrap"><p class="empty">${filtroVideos === 'meus' ? 'Nenhum vídeo seu' : 'Nenhum vídeo'}${contaSel ? ' na conta ' + esc(contaSel) : ''} ainda. Use o formulário acima depois de postar.</p></div>`;
+        : `<div class="table-wrap"><p class="empty">${filtroVideos === 'meus' ? 'Nenhum vídeo seu' : 'Nenhum vídeo'}${contaSel ? ' na conta ' + esc(contaSel) : ''} ${periodoVideos === 'tudo' ? 'ainda. Use o formulário acima depois de postar.' : nomePeriodo[periodoVideos] + '.'}
+            ${periodoVideos !== 'tudo' && base.length ? '<button class="btn-text" type="button" data-per-ir="tudo">Ver todos</button>' : ''}</p></div>`;
+      const vt = $('[data-per-ir]'); if (vt) vt.addEventListener('click', () => { periodoVideos = 'tudo'; limite = 20; desenhar(); });
       $$('[data-fv]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.fv === filtroVideos)));
       const m = $('#mais-vid'); if (m) m.addEventListener('click', () => { limite += 20; desenhar(); });
     };
     desenhar();
     $$('[data-fv]').forEach((b) => b.addEventListener('click', () => { filtroVideos = b.dataset.fv; limite = 20; desenhar(); }));
+    $$('[data-per]').forEach((b) => b.addEventListener('click', () => { periodoVideos = b.dataset.per; limite = 20; desenhar(); }));
     $('#fv-conta').addEventListener('change', (e) => { contaSel = e.target.value; limite = 20; desenhar(); });
 
     $('#f-video').addEventListener('submit', async (e) => {
@@ -982,6 +1002,7 @@
       if (!ok) return;
       toast(`Vídeo registrado em ${fmtData(novo.postado_em)}`);
       filtroVideos = 'meus';
+      if (periodoVideos !== 'tudo') periodoVideos = 'hoje';   // mostra o vídeo que acabou de entrar
       render();
     });
   };
