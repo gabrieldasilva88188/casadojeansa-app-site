@@ -3,7 +3,7 @@
 Sobe um PostgreSQL temporário com o mesmo esquema, regras (RLS), gatilhos e carga
 inicial do projeto, e responde nas mesmas rotas que o site usa:
   POST /auth/v1/token?grant_type=password|refresh_token, POST /auth/v1/signup,
-  PUT /auth/v1/user, POST /auth/v1/logout
+  GET e PUT /auth/v1/user, POST /auth/v1/logout
   GET/POST/PATCH/DELETE /rest/v1/<tabela>?select=...&coluna=eq.valor&order=...&limit=&offset=
 
 Uso: python3 tools/supabase_local.py [porta]   (padrão 54321; precisa rodar como usuário comum)
@@ -169,6 +169,12 @@ class Handler(BaseHTTPRequestHandler):
             if not r:
                 return self.responder(400, {"code": 400, "error_code": "invalid_credentials", "msg": "Invalid login credentials"})
             return self.responder(200, sessao(r[0]["id"], r[0]["email"]))
+        if rota == "user" and metodo == "GET":
+            uid = TOKENS.get((self.headers.get("Authorization") or "").replace("Bearer ", ""))
+            if not uid:
+                return self.responder(401, {"code": 401, "msg": "invalid JWT"})
+            email = next((e for (u, e) in REFRESH.values() if u == uid), None)
+            return self.responder(200, {"id": uid, "email": email})
         if rota == "token" and q.get("grant_type") == "refresh_token":
             if b.get("refresh_token") not in REFRESH:
                 return self.responder(400, {"error_code": "refresh_token_not_found", "msg": "Invalid Refresh Token"})

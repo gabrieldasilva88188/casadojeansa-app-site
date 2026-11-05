@@ -1602,5 +1602,12 @@
     return r.detalhe;
   }
 
-  iniciar();
+  // Volta do link de confirmação do e-mail
+  (async () => {
+    let retorno = null;
+    try { retorno = await auth.lerRetornoDoEmail(); } catch (e) { retorno = null; }
+    if (retorno && retorno.ok) { await iniciar('produtos'); toast('E-mail confirmado!'); return; }
+    if (retorno && !retorno.ok) { location.hash = 'login'; await iniciar(); toast(retorno.msg, true); return; }
+    iniciar();
+  })();
 })();

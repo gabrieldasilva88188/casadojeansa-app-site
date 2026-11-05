@@ -110,12 +110,42 @@ window.Supa = (function () {
       return aceitarSessao(r);
     },
     async cadastrar(email, senha, nome) {
-      const r = await chamar('/auth/v1/signup', { method: 'POST', body: { email, password: senha, data: { nome } }, comLogin: false });
+      // redirect_to: o link do e-mail de confirmação volta para este site (precisa estar liberado no Supabase)
+      const volta = encodeURIComponent(location.origin + location.pathname);
+      const r = await chamar('/auth/v1/signup?redirect_to=' + volta, { method: 'POST', body: { email, password: senha, data: { nome } }, comLogin: false });
       return aceitarSessao(r); // null quando o Supabase exige confirmar o e-mail
     },
     async trocarSenha(senha) {
       await garantirSessao();
       return chamar('/auth/v1/user', { method: 'PUT', body: { password: senha } });
+    },
+    // Quem chega pelo link do e-mail volta com #access_token=... (deu certo) ou #error=... (link usado/vencido)
+    async lerRetornoDoEmail() {
+      const h = location.hash.replace(/^#/, '');
+      if (!/(^|&)(access_token|error|error_code)=/.test(h)) return null;
+      const q = new URLSearchParams(h);
+      history.replaceState(null, '', location.pathname + location.search);   // limpa o endereço
+      if (q.get('access_token')) {
+        sessao = null;
+        aceitarSessao({ access_token: q.get('access_token'), refresh_token: q.get('refresh_token'),
+          expires_in: Number(q.get('expires_in')) || 3600, expires_at: Number(q.get('expires_at')) || undefined });
+        // quem é o usuário: vem dentro do próprio token (JWT: sub, email); se não der, pergunta ao Supabase
+        try {
+          const b64 = q.get('access_token').split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+          const dados = JSON.parse(decodeURIComponent(escape(atob(b64))));
+          sessao.user = { id: dados.sub, email: dados.email };
+        } catch (e) {
+          try { const u = await chamar('/auth/v1/user'); sessao.user = { id: u.id, email: u.email }; } catch (e2) { sessao.user = null; }
+        }
+        if (!sessao.user || !sessao.user.id) { guardar(null); return { ok: false, msg: 'Não foi possível confirmar o e-mail por esse link. Tente entrar.' }; }
+        guardar(sessao);
+        return { ok: true, tipo: q.get('type') };
+      }
+      const codigo = q.get('error_code') || q.get('error');
+      const msg = codigo === 'otp_expired'
+        ? 'Esse link de confirmação já foi usado ou venceu. Se você já tinha clicado nele antes, seu e-mail já está confirmado: é só entrar.'
+        : 'Não foi possível confirmar o e-mail por esse link. Tente entrar; se não der, faça o cadastro de novo.';
+      return { ok: false, msg };
     },
     async sair() {
       try { if (sessao) await chamar('/auth/v1/logout', { method: 'POST' }); } catch (e) { /* sai mesmo assim */ }
