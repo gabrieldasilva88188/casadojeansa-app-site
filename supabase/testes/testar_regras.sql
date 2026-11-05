@@ -244,7 +244,7 @@ reset role;
 -- =====================================================================
 select set_config('request.jwt.claim.sub', teste.id_de('ketlin@exemplo.com'), false);
 set role authenticated;
-select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade) values (1, 1, 2) $$,
+select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade) values (2, 1, 2) $$,
   'colaborador não lança venda');
 reset role;
 
@@ -261,10 +261,12 @@ select teste.confere((select mudancas -> 'quantidade' ->> 'para' = '4' from publ
   'edição de venda entra nos registros com o antes e o depois');
 select teste.confere((select sum(pecas_vendidas) = 4 from public.v_vendas_semana where conta = 'SHAMA' and prateleira = 'A2'),
   'v_vendas_semana: peças vendidas por produto, conta e semana');
-select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade) values (1, 1, 0) $$,
+select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade) values (2, 1, 0) $$,
   'venda precisa ter pelo menos 1 peça');
-select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade, vendido_em) values (1, 1, 1, current_date + 10) $$,
+select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade, vendido_em) values (2, 1, 1, current_date + 10) $$,
   'venda não pode ter data no futuro');
+select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade) values (1, 1, 1) $$,
+  'não lança venda de produto excluído');
 delete from public.vendas where produto_id = 2;
 select teste.confere((select count(*) = 0 from public.vendas) and
                      (select count(*) = 1 from public.registros where acao = 'Excluiu venda'),

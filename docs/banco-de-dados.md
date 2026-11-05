@@ -163,7 +163,7 @@ automaticamente no ambiente local.
 ## Testes
 
 `bash tools/testar_banco.sh` sobe um PostgreSQL temporário, aplica o esquema e a carga inicial e
-testa 59 regras como colaboradora, admin fixo, outro admin, conta excluída e visitante sem login.
+testa 60 regras como colaboradora, admin fixo, outro admin, conta excluída e visitante sem login.
 Precisa do PostgreSQL instalado na máquina.
 
 ## Pontos para decidir com o cliente
