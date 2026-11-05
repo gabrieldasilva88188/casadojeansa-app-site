@@ -1,26 +1,111 @@
-/* Gerenciador de Estoque e Vídeos — protótipo navegável (sem backend).
-   Os dados ficam só no navegador de quem está usando. Na versão final,
-   cada função "salvar" vira uma chamada ao Supabase. */
+/* Gerenciador de Estoque e Vídeos.
+   Os dados vêm do Supabase (js/supa.js): login, perfis, produtos, vídeos e vendas.
+   As regras de quem pode ver e alterar o quê ficam no próprio banco (RLS). */
 (function () {
   'use strict';
 
-  const KEY = 'gev-prototipo-v5';
   const POR_PAGINA = 40;
+  const { auth, db } = window.Supa;
 
-  // ---------- Estado ----------
-  const clone = (o) => JSON.parse(JSON.stringify(o));
-  const seedState = () => ({ ...clone(window.SEED), sessao: null, editId: null });
-  function load() {
+  // ---------- Estado (cópia do banco na memória) ----------
+  const vazio = () => ({ contas: [], contaId: {}, contaNome: {}, fabricantes: [], usuarios: [], produtos: [], videos: [],
+    vendas: [], registros: [], sessao: null, perfil: null, editId: null, carregadoEm: 0 });
+  let state = vazio();
+
+  async function carregarPerfil() {
+    const u = auth.usuario();
+    const r = await db.listar('perfis', `select=id,nome,email,papel,fixo,ativo,aprovado,senha_provisoria&id=eq.${u.id}`);
+    state.sessao = u.id;
+    state.perfil = r[0] || null;
+  }
+
+  async function carregarDados() {
+    const admin = state.perfil && state.perfil.papel === 'admin';
+    const [contas, fabs, prods, vids, perfis, vendas, regs] = await Promise.all([
+      db.listar('contas_tiktok', 'select=id,nome,ordem,ativa&order=ordem,nome'),
+      db.listar('fabricantes', 'select=id,nome&order=nome'),
+      db.listar('produtos', 'select=id,local,prateleira,descricao,quantidade,fabricante_id,link_tiktok,criado_em&order=id'),
+      db.listar('videos', 'select=id,produto_id,conta_id,usuario_id,postado_em&order=postado_em.desc,id.desc'),
+      db.listar('perfis', 'select=id,nome,email,papel,fixo,ativo,aprovado,criado_em&order=nome'),
+      admin ? db.listar('vendas', 'select=id,produto_id,conta_id,quantidade,vendido_em,criado_por,criado_em&order=vendido_em.desc,id.desc') : [],
+      admin ? db.listar('registros', 'select=id,usuario_id,acao,tabela,registro_id,detalhe,mudancas,criado_em&order=criado_em.desc,id.desc') : []
+    ]);
+    state.contaId = {}; state.contaNome = {};
+    contas.forEach((c) => { state.contaId[c.nome] = c.id; state.contaNome[c.id] = c.nome; });
+    state.contas = contas.filter((c) => c.ativa).map((c) => c.nome);
+    state.fabricantes = fabs;
+    const nomeFab = Object.fromEntries(fabs.map((f) => [f.id, f.nome]));
+    state.produtos = prods.map((x) => ({ id: String(x.id), num: x.id, local: x.local, prateleira: x.prateleira,
+      descricao: x.descricao, quantidade: x.quantidade, fabricante: nomeFab[x.fabricante_id] || '',
+      link: x.link_tiktok || '', criadoEm: x.criado_em }));
+    state.videos = vids.map((v) => ({ id: String(v.id), produtoId: String(v.produto_id), usuarioId: v.usuario_id,
+      conta: state.contaNome[v.conta_id] || '?', data: v.postado_em }));
+    state.usuarios = perfis.map((u) => ({ id: u.id, nome: u.nome, email: u.email, papel: u.papel, fixo: u.fixo,
+      aprovado: u.aprovado, excluido: !u.ativo, criadoEm: u.criado_em }));
+    state.vendas = vendas.map((v) => ({ id: String(v.id), produtoId: String(v.produto_id), conta: state.contaNome[v.conta_id] || '?',
+      quantidade: v.quantidade, data: v.vendido_em, criadoPor: v.criado_por, criadoEm: v.criado_em }));
+    state.registros = regs.map((x) => ({ usuarioId: x.usuario_id, acao: x.acao, tabela: x.tabela, registroId: x.registro_id,
+      detalhe: x.detalhe, mudancas: x.mudancas, data: x.criado_em }));
+    state.carregadoEm = Date.now();
+    const meu = state.usuarios.find((u) => u.id === state.sessao);
+    if (meu && state.perfil) state.perfil.papel = meu.papel;
+  }
+
+  // Telas especiais antes de entrar no sistema
+  function portao() {
+    if (!state.sessao) return null;
+    const p = state.perfil;
+    if (!p || (!p.aprovado && p.ativo)) return 'pendente';
+    if (!p.ativo) return 'sem-acesso';
+    if (p.senha_provisoria) return 'nova-senha';
+    return null;
+  }
+
+  async function iniciar(rotaDepois) {
+    if (!auth.logado()) { state = vazio(); render(); return; }
+    telaSimples('Carregando…');
     try {
-      const raw = localStorage.getItem(KEY);
-      if (raw) return JSON.parse(raw);
-    } catch (e) { /* armazenamento indisponível: segue com os dados de exemplo */ }
-    return seedState();
+      await carregarPerfil();
+      if (!portao()) await carregarDados();
+    } catch (e) {
+      if (e.status === 401 || e.status === 400 || e.status === 403) { await auth.sair(); state = vazio(); render(); return; }
+      telaSimples(e.message, true);
+      return;
+    }
+    if (rotaDepois && location.hash !== '#' + rotaDepois) { location.hash = rotaDepois; return; }
+    render();
   }
-  function save() {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); } catch (e) { /* ignora */ }
+
+  // Executa uma gravação no banco: trava o botão, mostra o erro em português
+  async function executar(btn, fn, okMsg) {
+    let html;
+    if (btn) { html = btn.innerHTML; btn.disabled = true; btn.textContent = 'Salvando…'; }
+    try {
+      await fn();
+      if (okMsg) toast(okMsg);
+      return true;
+    } catch (e) {
+      toast(e.message, true);
+      return false;
+    } finally {
+      if (btn && btn.isConnected) { btn.disabled = false; btn.innerHTML = html; }
+    }
   }
-  let state = load();
+
+  async function idFabricante(nome) {
+    if (!nome) return null;
+    const achar = () => state.fabricantes.find((f) => f.nome === nome);
+    if (achar()) return achar().id;
+    try {
+      const f = await db.inserir('fabricantes', { nome });
+      state.fabricantes.push(f);
+      return f.id;
+    } catch (e) {
+      if (e.code !== '23505') throw e;
+      state.fabricantes = await db.listar('fabricantes', 'select=id,nome&order=nome');
+      return achar().id;
+    }
+  }
 
   // ---------- Utilidades ----------
   const $ = (sel, root) => (root || document).querySelector(sel);
@@ -39,32 +124,27 @@
   const iniciais = (nome) => nome.split(' ').map((p) => p[0]).slice(0, 2).join('').toUpperCase();
   const usuario = (id) => state.usuarios.find((u) => u.id === id) || { nome: 'Desconhecido', papel: '', excluido: true };
   const nomeDe = (id) => { const u = usuario(id); return u.nome + (u.excluido ? ' (conta excluída)' : ''); };
-  const ativos = () => state.usuarios.filter((u) => !u.excluido);
+  const ativos = () => state.usuarios.filter((u) => !u.excluido && u.aprovado);
+  const pendentes = () => state.usuarios.filter((u) => !u.excluido && !u.aprovado);
   const produto = (id) => state.produtos.find((p) => p.id === id);
   const eu = () => state.sessao && usuario(state.sessao);
   const agora = () => new Date();
   const diasDesde = (iso) => Math.max(0, Math.floor((agora() - new Date(iso)) / 86400000));
   const dentroDe = (iso, dias) => (agora() - new Date(iso)) / 86400000 <= dias;
-  const novoId = (pref) => pref + Date.now().toString(36) + Math.floor(Math.random() * 1000);
   const descricao = (p) => p.descricao || 'Sem descrição';
   const rotulo = (p) => `${p.prateleira} ${descricao(p)}`;
   const idTxt = (p) => '#' + String(p.num).padStart(4, '0');
-  const proximoNum = () => state.produtos.reduce((m, p) => Math.max(m, p.num || 0), 0) + 1;
   const plural = (n, um, varios) => `${fmtN(n)} ${n === 1 ? um : varios}`;
   const dias = (n) => (n === 0 ? 'hoje' : n === 1 ? 'há 1 dia' : `há ${n} dias`);
 
-  function registrar(acao, detalhe) {
-    state.registros.unshift({ usuarioId: state.sessao, acao, detalhe, data: agora().toISOString() });
-  }
-
   let toastTimer;
-  function toast(msg) {
+  function toast(msg, erro) {
     const old = $('.toast'); if (old) old.remove();
     const t = document.createElement('div');
-    t.className = 'toast'; t.setAttribute('role', 'status'); t.textContent = msg;
+    t.className = 'toast' + (erro ? ' toast-erro' : ''); t.setAttribute('role', erro ? 'alert' : 'status'); t.textContent = msg;
     document.body.appendChild(t);
     clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => t.remove(), 2800);
+    toastTimer = setTimeout(() => t.remove(), erro ? 6000 : 2800);
   }
 
   // Vídeos de um produto (opcionalmente só de uma conta / período)
@@ -102,17 +182,29 @@
   function ir(rota) {
     if (location.hash === '#' + rota) render(); else location.hash = rota;
   }
-  window.addEventListener('hashchange', render);
+  // Ao trocar de tela, atualiza os dados se a última leitura tiver mais de 30 segundos
+  window.addEventListener('hashchange', async () => {
+    if (state.sessao && !portao() && Date.now() - state.carregadoEm > 30000) {
+      try { await carregarDados(); } catch (e) { /* segue com o que já tem */ }
+    }
+    render();
+  });
+
+  function telaSimples(msg, erro) {
+    app.innerHTML = `<div class="tela-simples"><p class="${erro ? 'err' : 'muted'}">${esc(msg)}</p>
+      ${erro ? '<button class="btn" type="button" onclick="location.reload()">Tentar de novo</button>' : ''}</div>`;
+  }
 
   function render() {
-    // sessão de alguém cuja conta foi excluída cai para o login
-    if (state.sessao && usuario(state.sessao).excluido) { state.sessao = null; save(); }
     let rota = rotaAtual();
-    if (!state.sessao && !PUBLICAS.includes(rota)) rota = 'login';
-    if (state.sessao && PUBLICAS.includes(rota)) rota = 'produtos';
+    const g = portao();
+    if (g) rota = g;
+    else if (!state.sessao && !PUBLICAS.includes(rota)) rota = 'login';
+    else if (state.sessao && PUBLICAS.includes(rota)) rota = 'produtos';
     clearInterval(relogioTimer);
     fecharModal();
     (PAGINAS[rota] || PAGINAS.produtos)();
+    if (rota === 'login' || rota === 'cadastro') return;
     window.scrollTo(0, 0);
     const h1 = $('h1'); if (h1) document.title = h1.textContent + ' | Gerenciador de Estoque e Vídeos';
   }
@@ -149,7 +241,8 @@
       ['videos', 'Vídeos', ICON.videos],
       ['analise', 'Análise', ICON.analise]
     ];
-    if (u.papel === 'admin') itens.push(['vendas', 'Vendas', ICON.vendas], ['admin', 'Admin', ICON.admin]);
+    const np = pendentes().length;
+    if (u.papel === 'admin') itens.push(['vendas', 'Vendas', ICON.vendas], ['admin', np ? `Admin <b class="badge" aria-label="${np} cadastros aguardando">${np}</b>` : 'Admin', ICON.admin]);
     const links = itens.map(([r, n, i]) =>
       `<a href="#${r}" ${ativo === r ? 'aria-current="page"' : ''}>${i}<span>${n}</span></a>`).join('');
     app.innerHTML = `
@@ -162,14 +255,15 @@
               <span class="avatar">${iniciais(u.nome)}</span>
               <span class="who"><b>${esc(u.nome)}</b><span>${u.papel === 'admin' ? 'Admin master' : 'Colaborador'}</span></span>
             </div>
-            <button class="link-btn" data-acao="sair" type="button">Sair</button>
-            <p class="proto-note">Protótipo. Estoque da planilha da loja; vídeos e vendas são exemplos.</p>
+            <div class="side-links"><button class="link-btn" data-acao="senha" type="button">Alterar senha</button>
+            <button class="link-btn" data-acao="sair" type="button">Sair</button></div>
           </div>
         </aside>
         <div class="topbar-wrap">
           <header class="topbar">
             <span class="brand-name">Gerenciador de Estoque e Vídeos</span>
-            <button class="link-btn" style="color:inherit" data-acao="sair" type="button">Sair</button>
+            <span class="top-links"><button class="link-btn" style="color:inherit" data-acao="senha" type="button">Senha</button>
+            <button class="link-btn" style="color:inherit" data-acao="sair" type="button">Sair</button></span>
           </header>
           <main class="main" id="conteudo"><div class="page">${conteudo}</div></main>
         </div>
@@ -178,7 +272,10 @@
   }
 
   document.addEventListener('click', (e) => {
-    if (e.target.closest('[data-acao="sair"]')) { state.sessao = null; save(); ir('login'); }
+    if (e.target.closest('[data-acao="sair"]')) {
+      auth.sair().then(() => { state = vazio(); if (location.hash === '#login') render(); else location.hash = 'login'; });
+    }
+    if (e.target.closest('[data-acao="senha"]')) modalSenha();
   });
 
   // Filtro de conta do TikTok, reaproveitado em várias telas
@@ -205,11 +302,6 @@
       </div>`;
   }
 
-  function entrar(id) {
-    state.sessao = id; save();
-    toast('Olá, ' + usuario(id).nome.split(' ')[0] + '!');
-    ir('produtos');
-  }
 
   const PAGINAS = {};
 
@@ -224,49 +316,43 @@
           <input class="input" id="l-senha" type="password" autocomplete="current-password"></div>
         <p class="err" id="l-err" role="alert" hidden></p>
         <button class="btn" type="submit">Entrar</button>
-        <p class="muted" style="font-size:.9rem">Ainda não tem acesso? <a href="#cadastro" class="link-btn">Criar conta</a></p>
-      </form>
-      <div class="demo-box">
-        <p>Para a demonstração, entre direto com um perfil de exemplo:</p>
-        <div class="demo-btns">
-          <button class="btn btn-ghost" type="button" data-demo="u1">Admin master (Ricardo)</button>
-          <button class="btn btn-ghost" type="button" data-demo="u2">Admin master (Márcio)</button>
-          <button class="btn btn-ghost demo-full" type="button" data-demo="u3">Colaboradora (Ketlin)</button>
-        </div>
-      </div>`);
-    $$('[data-demo]').forEach((b) => b.addEventListener('click', () => {
-      const u = usuario(b.dataset.demo);
-      if (u.excluido) { const err = $('#l-err'); err.textContent = 'Essa conta de exemplo foi excluída. Restaure os dados de exemplo pela área Admin.'; err.hidden = false; return; }
-      entrar(b.dataset.demo);
-    }));
-    $('#f-login').addEventListener('submit', (e) => {
+        <p class="muted" style="font-size:.9rem">Ainda não tem acesso? <a href="#cadastro" class="link-btn">Pedir acesso</a></p>
+        <p class="muted" style="font-size:.85rem">Esqueceu a senha? Fale com o responsável pela loja.</p>
+      </form>`);
+    $('#f-login').addEventListener('submit', async (e) => {
       e.preventDefault();
       const email = $('#l-email').value.trim().toLowerCase();
       const senha = $('#l-senha').value;
       const err = $('#l-err');
       const falha = (m) => { err.textContent = m; err.hidden = false; };
       if (!email || !senha) return falha('Preencha o e-mail e a senha.');
-      const u = state.usuarios.find((x) => x.email.toLowerCase() === email);
-      if (!u) return falha('Não encontramos esse e-mail. Confira ou use um dos perfis de exemplo abaixo.');
-      if (u.excluido) return falha('Essa conta foi excluída pelo admin master. Fale com o responsável pela loja.');
-      entrar(u.id);
+      err.hidden = true;
+      const btn = e.submitter || $('#f-login button[type=submit]');
+      btn.disabled = true; btn.textContent = 'Entrando…';
+      try {
+        await auth.entrar(email, senha);
+        await iniciar('produtos');
+      } catch (er) {
+        btn.disabled = false; btn.textContent = 'Entrar';
+        falha(er.message);
+      }
     });
   };
 
   PAGINAS.cadastro = function () {
     document.title = 'Criar conta | Gerenciador de Estoque e Vídeos';
     telaAuth(`
-      <div><h1>Criar conta</h1><p class="muted" style="margin-top:6px">Toda conta nova começa como colaborador. O admin master pode mudar o cargo depois.</p></div>
+      <div><h1>Pedir acesso</h1><p class="muted" style="margin-top:6px">Crie sua conta. Você entra como colaborador assim que um admin master aprovar o cadastro.</p></div>
       <form id="f-cad" novalidate>
         <div class="field"><label for="c-nome">Nome completo</label><input class="input" id="c-nome" autocomplete="name"></div>
         <div class="field"><label for="c-email">E-mail</label><input class="input" id="c-email" type="email" autocomplete="email"></div>
         <div class="field"><label for="c-senha">Senha</label><input class="input" id="c-senha" type="password" autocomplete="new-password"><span class="hint">Mínimo de 6 caracteres.</span></div>
         <div class="field"><label for="c-senha2">Confirmar senha</label><input class="input" id="c-senha2" type="password" autocomplete="new-password"></div>
         <p class="err" id="c-err" role="alert" hidden></p>
-        <button class="btn" type="submit">Criar conta</button>
+        <button class="btn" type="submit">Enviar cadastro</button>
         <p class="muted" style="font-size:.9rem">Já tem conta? <a href="#login" class="link-btn">Entrar</a></p>
       </form>`);
-    $('#f-cad').addEventListener('submit', (e) => {
+    $('#f-cad').addEventListener('submit', async (e) => {
       e.preventDefault();
       const nome = $('#c-nome').value.trim();
       const email = $('#c-email').value.trim().toLowerCase();
@@ -275,18 +361,101 @@
       const falha = (m) => { err.textContent = m; err.hidden = false; };
       if (!nome || !email || !s1) return falha('Preencha nome, e-mail e senha.');
       if (!/^\S+@\S+\.\S+$/.test(email)) return falha('Digite um e-mail válido, como nome@loja.com.');
-      if (state.usuarios.some((u) => !u.excluido && u.email.toLowerCase() === email)) return falha('Esse e-mail já tem conta. Use a tela de entrar.');
       if (s1.length < 6) return falha('A senha precisa ter pelo menos 6 caracteres.');
       if (s1 !== s2) return falha('As duas senhas não são iguais.');
-      const u = { id: novoId('u'), nome, email, papel: 'colaborador' };
-      state.usuarios.push(u);
-      state.sessao = u.id;
-      registrar('Criou conta', nome);
-      save();
-      toast('Conta criada');
-      ir('produtos');
+      err.hidden = true;
+      const btn = e.submitter || $('#f-cad button[type=submit]');
+      btn.disabled = true; btn.textContent = 'Enviando…';
+      try {
+        const sess = await auth.cadastrar(email, s1, nome);
+        if (sess) { await iniciar(); return; }
+        $('.auth-box').innerHTML = `<div><h1>Cadastro enviado</h1>
+          <p class="muted" style="margin-top:8px">Confirme o e-mail que enviamos para <b>${esc(email)}</b>.
+          Depois disso, um admin master precisa aprovar o seu acesso.</p></div>
+          <a class="btn" href="#login">Voltar para entrar</a>`;
+      } catch (er) {
+        btn.disabled = false; btn.textContent = 'Enviar cadastro';
+        falha(er.message);
+      }
     });
   };
+
+  PAGINAS.pendente = function () {
+    const p = state.perfil || {};
+    document.title = 'Cadastro em análise | Gerenciador de Estoque e Vídeos';
+    telaAuth(`
+      <div><h1>Cadastro aguardando aprovação</h1>
+        <p class="muted" style="margin-top:8px">Olá${p.nome ? ', ' + esc(p.nome.split(' ')[0]) : ''}! Seu cadastro (${esc(p.email || '')}) foi enviado.
+        Um admin master precisa aprovar seu acesso antes de você usar o sistema.</p></div>
+      <button class="btn" type="button" id="b-verificar">Já fui aprovado, entrar</button>
+      <button class="btn btn-ghost" type="button" data-acao="sair">Sair</button>`);
+    $('#b-verificar').addEventListener('click', () => iniciar('produtos'));
+  };
+
+  PAGINAS['sem-acesso'] = function () {
+    document.title = 'Sem acesso | Gerenciador de Estoque e Vídeos';
+    telaAuth(`
+      <div><h1>Conta sem acesso</h1>
+        <p class="muted" style="margin-top:8px">Esta conta foi excluída ou o cadastro foi recusado por um admin master.
+        Se acha que é um engano, fale com o responsável pela loja.</p></div>
+      <button class="btn btn-ghost" type="button" data-acao="sair">Sair</button>`);
+  };
+
+  PAGINAS['nova-senha'] = function () {
+    const p = state.perfil || {};
+    document.title = 'Crie sua senha | Gerenciador de Estoque e Vídeos';
+    telaAuth(`
+      <div><h1>Crie sua senha</h1>
+        <p class="muted" style="margin-top:8px">Olá, ${esc((p.nome || '').split(' ')[0])}! Você entrou com a senha provisória.
+        Escolha uma senha só sua para continuar.</p></div>
+      <form id="f-ns" novalidate>
+        <div class="field"><label for="ns-1">Nova senha</label><input class="input" id="ns-1" type="password" autocomplete="new-password"><span class="hint">Mínimo de 6 caracteres.</span></div>
+        <div class="field"><label for="ns-2">Confirmar nova senha</label><input class="input" id="ns-2" type="password" autocomplete="new-password"></div>
+        <p class="err" id="ns-err" role="alert" hidden></p>
+        <button class="btn" type="submit">Salvar senha e entrar</button>
+        <button class="btn btn-ghost" type="button" data-acao="sair">Sair</button>
+      </form>`);
+    $('#f-ns').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const s1 = $('#ns-1').value, s2 = $('#ns-2').value, err = $('#ns-err');
+      const falha = (m) => { err.textContent = m; err.hidden = false; };
+      if (s1.length < 6) return falha('A senha precisa ter pelo menos 6 caracteres.');
+      if (s1 !== s2) return falha('As duas senhas não são iguais.');
+      const btn = e.submitter || $('#f-ns button[type=submit]');
+      btn.disabled = true; btn.textContent = 'Salvando…';
+      try {
+        await auth.trocarSenha(s1);
+        await db.alterar('perfis', `id=eq.${state.sessao}`, { senha_provisoria: false });
+        state.perfil.senha_provisoria = false;
+        toast('Senha criada. Bem-vindo!');
+        await iniciar('produtos');
+      } catch (er) {
+        btn.disabled = false; btn.textContent = 'Salvar senha e entrar';
+        falha(er.message);
+      }
+    });
+  };
+
+  function modalSenha() {
+    abrirModal({
+      titulo: 'Alterar senha',
+      corpo: `<div class="modal-form" id="f-ms">
+        <div class="field"><label for="ms-1">Nova senha</label><input class="input" id="ms-1" type="password" autocomplete="new-password"><span class="hint">Mínimo de 6 caracteres.</span></div>
+        <div class="field"><label for="ms-2">Confirmar nova senha</label><input class="input" id="ms-2" type="password" autocomplete="new-password"></div>
+        <p class="err" id="ms-err" role="alert"></p></div>`,
+      botoes: [
+        { label: 'Salvar nova senha', acao: async (e) => {
+          const s1 = $('#ms-1').value, s2 = $('#ms-2').value;
+          if (s1.length < 6) { $('#ms-err').textContent = 'A senha precisa ter pelo menos 6 caracteres.'; return; }
+          if (s1 !== s2) { $('#ms-err').textContent = 'As duas senhas não são iguais.'; return; }
+          const ok = await executar(e.currentTarget, () => auth.trocarSenha(s1), 'Senha alterada');
+          if (ok) fecharModal();
+        } },
+        { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
+      ]
+    });
+    $('#ms-1').focus();
+  }
 
   // ---------- Produtos ----------
   const F = { busca: '', local: '', letra: '', fab: '', limite: POR_PAGINA };
@@ -363,7 +532,7 @@
     $('#f-conta').addEventListener('change', mudou((v) => { contaSel = v; }));
     $('#lista').addEventListener('click', (e) => {
       const b = e.target.closest('[data-editar]');
-      if (b) { state.editId = b.dataset.editar; save(); ir('produto-editar'); }
+      if (b) { state.editId = b.dataset.editar; ir('produto-editar'); }
     });
   };
 
@@ -435,18 +604,19 @@
       <div class="page-head"><div>
         <a class="link-btn" href="#produtos">Voltar para produtos</a>
         <h1 style="margin-top:10px">Adicionar produto</h1>
-        <p>Os mesmos dados da planilha de estoque: local, prateleira, descrição, peças e fabricante. O ID ${'#' + String(proximoNum()).padStart(4, '0')} é criado automaticamente.</p></div></div>
+        <p>Os mesmos dados da planilha de estoque: local, prateleira, descrição, peças e fabricante. O ID é criado automaticamente.</p></div></div>
       ${formProduto(null)}`);
-    $('#f-prod').addEventListener('submit', (e) => {
+    $('#f-prod').addEventListener('submit', async (e) => {
       e.preventDefault();
       const d = lerFormProduto(null);
       if (!d) return;
-      const num = proximoNum();
-      state.produtos.push({ id: novoId('p'), num, ...d, criadoEm: agora().toISOString() });
-      registrar('Adicionou produto', `${d.prateleira} ${d.descricao} (ID #${String(num).padStart(4, '0')})`);
-      save();
-      toast('Produto adicionado');
-      ir('produtos');
+      const ok = await executar(e.submitter, async () => {
+        const fabId = await idFabricante(d.fabricante);
+        await db.inserir('produtos', { local: d.local, prateleira: d.prateleira, descricao: d.descricao,
+          quantidade: d.quantidade, fabricante_id: fabId, link_tiktok: d.link || null });
+        await carregarDados();
+      }, 'Produto adicionado');
+      if (ok) ir('produtos');
     });
   };
 
@@ -466,7 +636,7 @@
   PAGINAS['produto-editar'] = function (aviso) {
     const p = produto(state.editId);
     if (!p) { ir('produtos'); return; }
-    const hist = state.registros.filter((r) => r.detalhe.startsWith(p.prateleira + ' ') || r.detalhe.startsWith(p.prateleira + ':')).slice(0, 6);
+    const hist = state.registros.filter((r) => r.tabela === 'produtos' && r.registroId === p.id).slice(0, 6);
     const nv = videosDe(p.id).length, ult = ultimoVideo(p.id);
     shell('produtos', `
       <div class="page-head"><div>
@@ -479,8 +649,8 @@
         <div class="panel-head"><h2>Histórico deste produto</h2></div>
         ${hist.length ? `<ul class="history">${hist.map((r) => `
           <li><span class="avatar">${iniciais(usuario(r.usuarioId).nome)}</span>
-          <div><b>${esc(nomeDe(r.usuarioId))}</b> ${esc(r.acao.toLowerCase())}: ${esc(r.detalhe.replace(/^[A-Z]{1,2}\d{1,2}[: ]\s?/, ''))}<br><time>${fmtData(r.data)}</time></div></li>`).join('')}</ul>`
-          : '<p class="muted">Nenhuma alteração registrada ainda.</p>'}
+          <div><b>${esc(nomeDe(r.usuarioId))}</b> ${esc(r.acao.toLowerCase())}: ${esc(detalheRegistro(r).replace(/^[A-Z]{1,2}\d{1,2}[: ]\s?/, ''))}<br><time>${fmtData(r.data)}</time></div></li>`).join('')}</ul>`
+          : `<p class="muted">${eu().papel === 'admin' ? 'Nenhuma alteração registrada ainda.' : 'O histórico completo fica na área do admin master.'}</p>`}
       </section>`);
     $('#f-prod').addEventListener('submit', (e) => {
       e.preventDefault();
@@ -526,7 +696,7 @@
       corpo: `<p class="muted">Confira o que vai mudar na prateleira ${esc(p.prateleira)}:</p>
         <ul class="diff">${m.map(([k, v]) => `<li><b>${k}</b><span>${esc(v)}</span></li>`).join('')}</ul>`,
       botoes: [
-        { label: 'Sim, salvar edições', acao: () => salvarEdicao(p, d, m) },
+        { label: 'Sim, salvar edições', acao: (e) => salvarEdicao(p, d, m, e.currentTarget) },
         { label: 'Não, cancelar', cls: 'btn-ghost', acao: () => {
           fecharModal();
           PAGINAS['produto-editar']('Edições canceladas. Nada foi salvo; abaixo estão os dados atuais do produto.');
@@ -536,14 +706,14 @@
     });
   }
 
-  function salvarEdicao(p, d, m) {
-    const prat = p.prateleira;
-    Object.assign(p, d);
-    registrar('Editou produto', `${prat}: ${m.map(([k, v]) => k === 'Link' ? v : `${k.toLowerCase()} ${v}`).join(', ')}`);
-    save();
-    fecharModal();
-    toast('Edições salvas');
-    ir('produtos');
+  async function salvarEdicao(p, d, m, btn) {
+    const ok = await executar(btn, async () => {
+      const fabId = await idFabricante(d.fabricante);
+      await db.alterar('produtos', `id=eq.${p.id}`, { local: d.local, prateleira: d.prateleira, descricao: d.descricao,
+        quantidade: d.quantidade, fabricante_id: fabId, link_tiktok: d.link || null });
+      await carregarDados();
+    }, 'Edições salvas');
+    if (ok) { fecharModal(); ir('produtos'); }
   }
 
   // ---------- Vídeos ----------
@@ -613,7 +783,7 @@
     $('#v-prod').addEventListener('change', mostrarProduto);
     $('#f-video').addEventListener('click', (e) => {
       const b = e.target.closest('[data-cadastrar-link]');
-      if (b) { state.editId = b.dataset.cadastrarLink; save(); ir('produto-editar'); }
+      if (b) { state.editId = b.dataset.cadastrarLink; ir('produto-editar'); }
     });
 
     let limite = 20;
@@ -640,7 +810,7 @@
     $$('[data-fv]').forEach((b) => b.addEventListener('click', () => { filtroVideos = b.dataset.fv; limite = 20; desenhar(); }));
     $('#fv-conta').addEventListener('change', (e) => { contaSel = e.target.value; limite = 20; desenhar(); });
 
-    $('#f-video').addEventListener('submit', (e) => {
+    $('#f-video').addEventListener('submit', async (e) => {
       e.preventDefault();
       const txt = $('#v-prod').value.trim();
       const p = txt ? acharProduto(txt) : null;
@@ -654,10 +824,14 @@
         el.parentElement.querySelector('.input').setAttribute('aria-invalid', erros[el.dataset.err] ? 'true' : 'false');
       });
       if (Object.keys(erros).length) { $('#f-video [aria-invalid="true"]').focus(); return; }
-      const quando = agora(); // data e hora do sistema
-      state.videos.unshift({ id: novoId('v'), produtoId: p.id, usuarioId: state.sessao, conta, data: quando.toISOString() });
-      save();
-      toast(`Vídeo registrado em ${fmtData(quando.toISOString())}`);
+      let novo;
+      const ok = await executar(e.submitter, async () => {
+        // a data, a hora e o autor são definidos pelo servidor
+        novo = await db.inserir('videos', { produto_id: Number(p.id), conta_id: state.contaId[conta] });
+        await carregarDados();
+      });
+      if (!ok) return;
+      toast(`Vídeo registrado em ${fmtData(novo.postado_em)}`);
       filtroVideos = 'meus';
       render();
     });
@@ -667,7 +841,7 @@
   function escala(max) {
     const bruto = Math.max(max, 1) / 4;
     const pot = Math.pow(10, Math.floor(Math.log10(bruto)));
-    const passo = [1, 2, 2.5, 5, 10].map((m) => m * pot).find((s) => s >= bruto);
+    const passo = Math.max(1, [1, 2, 2.5, 5, 10].map((m) => m * pot).find((s) => s >= bruto)); // contagens: passo inteiro
     return { max: passo * 4, ticks: [0, 1, 2, 3, 4].map((i) => +(passo * i).toFixed(2)) };
   }
   function grafico(linhas, opts) {
@@ -794,7 +968,6 @@
         <div class="notice">${ICON.alerta}<span>Esta área é só para o admin master.</span></div>`);
       return;
     }
-    if (!state.vendas) state.vendas = [];
     const hoje = ymdLocal(agora());
     const meses = [...new Set([hoje.slice(0, 7), ...state.vendas.map((v) => v.data.slice(0, 7))])].sort().reverse();
     if (!V.mes || !meses.includes(V.mes)) V.mes = meses.find((m) => state.vendas.some((v) => v.data.startsWith(m))) || meses[0];
@@ -939,16 +1112,15 @@
     }));
 
     // adicionar
-    $('#f-venda').addEventListener('submit', (e) => {
+    $('#f-venda').addEventListener('submit', async (e) => {
       e.preventDefault();
       const r = lerVenda({ prod: '#s-prod', qtd: '#s-qtd', data: '#s-data', conta: V.contaForm }, '#f-venda');
       if (!r) return;
-      state.vendas.unshift({ id: novoId('s'), produtoId: r.p.id, conta: r.conta, quantidade: r.qtd, data: r.data,
-        criadoPor: state.sessao, criadoEm: agora().toISOString() });
-      state.vendas.sort((a, b) => b.data.localeCompare(a.data) || b.criadoEm.localeCompare(a.criadoEm));
-      registrar('Adicionou venda', `${r.qtd} peça(s) de ${rotulo(r.p)} na conta ${r.conta} em ${fmtDia(r.data)}`);
-      save();
-      toast('Venda adicionada');
+      const ok = await executar(e.submitter, async () => {
+        await db.inserir('vendas', { produto_id: Number(r.p.id), conta_id: state.contaId[r.conta], quantidade: r.qtd, vendido_em: r.data });
+        await carregarDados();
+      }, 'Venda adicionada');
+      if (!ok) return;
       V.mes = r.data.slice(0, 7); V.conta = ''; V.semana = 0;
       render();
     });
@@ -1021,11 +1193,13 @@
             corpo: `<p class="muted">Confira o que vai mudar nesta venda:</p>
               <ul class="diff">${mud.map(([k, t]) => `<li><b>${k}</b><span>${esc(t)}</span></li>`).join('')}</ul>`,
             botoes: [
-              { label: 'Sim, salvar edições', acao: () => {
-                Object.assign(v, { conta: r.conta, produtoId: r.p.id, quantidade: r.qtd, data: r.data });
-                registrar('Editou venda', `${rotulo(r.p)}: ${mud.map(([k, t]) => `${k.toLowerCase()} ${t}`).join(', ')}`);
-                state.vendas.sort((a, b) => b.data.localeCompare(a.data) || b.criadoEm.localeCompare(a.criadoEm));
-                save(); fecharModal(); toast('Edições salvas'); depois();
+              { label: 'Sim, salvar edições', acao: async (e) => {
+                const ok = await executar(e.currentTarget, async () => {
+                  await db.alterar('vendas', `id=eq.${v.id}`, { conta_id: state.contaId[r.conta], produto_id: Number(r.p.id),
+                    quantidade: r.qtd, vendido_em: r.data });
+                  await carregarDados();
+                }, 'Edições salvas');
+                if (ok) { fecharModal(); depois(); }
               } },
               { label: 'Não, cancelar', cls: 'btn-ghost', acao: () => { fecharModal(); toast('Edição cancelada. Nada foi salvo.'); } }
             ]
@@ -1043,10 +1217,12 @@
       titulo: 'Excluir esta venda?', alerta: true,
       corpo: `<p class="muted">${plural(v.quantidade, 'peça', 'peças')} de ${esc(p ? rotulo(p) : 'produto removido')}, conta ${esc(v.conta)}, em ${fmtDia(v.data)}. A exclusão fica registrada no histórico.</p>`,
       botoes: [
-        { label: 'Excluir venda', cls: 'btn-red', acao: () => {
-          state.vendas = state.vendas.filter((x) => x.id !== v.id);
-          registrar('Excluiu venda', `${v.quantidade} peça(s) de ${p ? rotulo(p) : 'produto removido'} na conta ${v.conta} em ${fmtDia(v.data)}`);
-          save(); fecharModal(); toast('Venda excluída'); depois();
+        { label: 'Excluir venda', cls: 'btn-red', acao: async (e) => {
+          const ok = await executar(e.currentTarget, async () => {
+            await db.apagar('vendas', `id=eq.${v.id}`);
+            await carregarDados();
+          }, 'Venda excluída');
+          if (ok) { fecharModal(); depois(); }
         } },
         { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
       ]
@@ -1061,9 +1237,11 @@
         <div class="notice">${ICON.alerta}<span>Esta área é só para o admin master. Peça acesso ao responsável pela loja.</span></div>`);
       return;
     }
-    const acoes = ['Adicionou produto', 'Editou produto', 'Registrou vídeo', 'Adicionou venda', 'Editou venda', 'Excluiu venda', 'Criou conta', 'Alterou cargo', 'Excluiu conta', 'Importou planilha'];
+    const acoes = ['Adicionou produto', 'Editou produto', 'Registrou vídeo', 'Adicionou venda', 'Editou venda', 'Excluiu venda',
+      'Criou conta', 'Aprovou cadastro', 'Recusou cadastro', 'Alterou cargo', 'Excluiu conta', 'Reativou conta', 'Importou planilha'];
     shell('admin', `
-      <div class="page-head"><div><h1>Admin master</h1><p>Vídeos de cada pessoa, a equipe e tudo o que foi alterado no sistema.</p></div></div>
+      <div class="page-head"><div><h1>Admin master</h1><p>Cadastros novos, vídeos de cada pessoa, a equipe e tudo o que foi alterado no sistema.</p></div></div>
+      <section id="pendentes"></section>
       <section class="panel">
         <div class="panel-head"><h2>Vídeos por pessoa</h2>
           <div class="toolbar">
@@ -1088,10 +1266,7 @@
           </div></div>
         <div id="lista-reg"></div>
       </section>
-      <section class="panel" style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;justify-content:space-between">
-        <p class="muted" style="max-width:60ch">Este protótipo guarda as alterações só neste navegador. Para recomeçar a demonstração do zero:</p>
-        <button class="btn btn-ghost" type="button" id="reset">Restaurar dados de exemplo</button>
-      </section>`);
+`);
 
     const desenharGrafico = () => {
       const linhas = ativos().map((u) => {
@@ -1128,31 +1303,77 @@
     };
 
     const desenharRegistros = () => {
-      const deVideos = state.videos.map((v) => {
-        const p = produto(v.produtoId);
-        return { usuarioId: v.usuarioId, acao: 'Registrou vídeo', detalhe: `${p ? rotulo(p) : 'produto removido'} na conta ${v.conta}`, data: v.data };
-      });
-      const todos = [...state.registros, ...deVideos]
-        .filter((r) => (!filtroUsuario || r.usuarioId === filtroUsuario) && (!filtroAcao || r.acao === filtroAcao))
-        .sort((a, b) => b.data.localeCompare(a.data));
+      const todos = state.registros
+        .filter((r) => (!filtroUsuario || r.usuarioId === filtroUsuario) && (!filtroAcao || r.acao === filtroAcao));
       const vis = todos.slice(0, limiteReg);
       $('#lista-reg').innerHTML = vis.length ? `
         <div class="table-wrap"><table class="cards">
           <thead><tr><th>Quando</th><th class="hide-sm">Quem</th><th>O que fez</th></tr></thead>
           <tbody>${vis.map((r) => `<tr>
             <td class="num nowrap" data-label="Quando">${fmtData(r.data)}</td>
-            <td class="hide-sm nowrap" data-label="Quem">${esc(nomeDe(r.usuarioId))}</td>
-            <td class="prod c-titulo"><b>${esc(r.acao)}</b><span class="show-sm">${esc(nomeDe(r.usuarioId))}</span><span class="muted">${esc(r.detalhe)}</span></td></tr>`).join('')}</tbody></table></div>
+            <td class="hide-sm nowrap" data-label="Quem">${r.usuarioId ? esc(nomeDe(r.usuarioId)) : 'Sistema'}</td>
+            <td class="prod c-titulo"><b>${esc(r.acao)}</b><span class="show-sm">${r.usuarioId ? esc(nomeDe(r.usuarioId)) : 'Sistema'}</span><span class="muted">${esc(detalheRegistro(r))}</span></td></tr>`).join('')}</tbody></table></div>
         ${todos.length > limiteReg ? `<p style="margin-top:14px"><button class="btn btn-ghost btn-sm" type="button" id="mais-reg">Mostrar mais ${Math.min(15, todos.length - limiteReg)} de ${todos.length - limiteReg}</button></p>` : ''}`
         : '<div class="table-wrap"><p class="empty">Nenhum registro com esses filtros.</p></div>';
       const m = $('#mais-reg'); if (m) m.addEventListener('click', () => { limiteReg += 15; desenharRegistros(); });
     };
 
-    desenharGrafico(); desenharEquipe(); desenharRegistros();
+    const desenharPendentes = () => {
+      const pend = pendentes();
+      $('#pendentes').innerHTML = pend.length ? `
+        <div class="panel panel-destaque">
+          <div class="panel-head"><div><h2>Cadastros aguardando aprovação</h2>
+            <p>${plural(pend.length, 'pessoa pediu', 'pessoas pediram')} acesso. Quem for aprovado entra como colaborador.</p></div></div>
+          <ul class="pend-lista">${pend.map((u) => `<li>
+            <div class="pend-quem"><b>${esc(u.nome)}</b><span class="muted">${esc(u.email)}, pediu em ${fmtData(u.criadoEm)}</span></div>
+            <div class="row-actions">
+              <button class="btn btn-sm" type="button" data-aprovar="${u.id}">Aprovar</button>
+              <button class="btn btn-danger-ghost btn-sm" type="button" data-recusar="${u.id}">Recusar</button>
+            </div></li>`).join('')}</ul>
+        </div>` : '';
+    };
+
+    const atualizarPerfil = async (btn, u, mudancas, msg) => {
+      const ok = await executar(btn, async () => {
+        await db.alterar('perfis', `id=eq.${u.id}`, mudancas);
+        await carregarDados();
+      }, msg);
+      if (ok) { fecharModal(); render(); }
+      return ok;
+    };
+
+    desenharPendentes(); desenharGrafico(); desenharEquipe(); desenharRegistros();
     $$('[data-per]').forEach((b) => b.addEventListener('click', () => { periodoAdmin = +b.dataset.per; desenharGrafico(); }));
     $('#ad-conta').addEventListener('change', (e) => { contaSel = e.target.value; desenharGrafico(); });
     $('#r-user').addEventListener('change', (e) => { filtroUsuario = e.target.value; limiteReg = 15; desenharRegistros(); });
     $('#r-acao').addEventListener('change', (e) => { filtroAcao = e.target.value; limiteReg = 15; desenharRegistros(); });
+
+    // Aprovar / recusar cadastro
+    $('#pendentes').addEventListener('click', (e) => {
+      const ba = e.target.closest('[data-aprovar]'), br = e.target.closest('[data-recusar]');
+      if (ba) {
+        const u = usuario(ba.dataset.aprovar);
+        abrirModal({
+          titulo: `Aprovar o cadastro de ${esc(u.nome)}?`,
+          corpo: `<p class="muted">${esc(u.email)} vai entrar como colaborador: vê o estoque, registra vídeos e edita produtos. Depois você pode mudar o cargo na lista da equipe.</p>`,
+          botoes: [
+            { label: 'Aprovar cadastro', acao: (ev) => atualizarPerfil(ev.currentTarget, u, { aprovado: true }, 'Cadastro aprovado') },
+            { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
+          ]
+        });
+      }
+      if (br) {
+        const u = usuario(br.dataset.recusar);
+        abrirModal({
+          titulo: `Recusar o cadastro de ${esc(u.nome)}?`, alerta: true,
+          corpo: `<p class="muted">${esc(u.email)} não vai conseguir usar o sistema. A recusa fica registrada no histórico.</p>`,
+          botoes: [
+            { label: 'Recusar cadastro', cls: 'btn-red', acao: (ev) => atualizarPerfil(ev.currentTarget, u, { ativo: false }, 'Cadastro recusado') },
+            { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
+          ]
+        });
+      }
+    });
 
     // Mudar cargo (com confirmação)
     $('#equipe').addEventListener('change', (e) => {
@@ -1163,15 +1384,11 @@
       abrirModal({
         titulo: virarAdmin ? `Tornar ${esc(u.nome)} admin master?` : `Tirar o acesso de admin de ${esc(u.nome)}?`,
         corpo: `<p class="muted">${virarAdmin
-          ? 'Essa pessoa vai acessar a área Admin: ver os registros de todos, mudar cargos e excluir contas.'
-          : 'Essa pessoa volta a ser colaborador e deixa de ver a área Admin.'}</p>`,
+          ? 'Essa pessoa vai acessar a área Admin e as vendas: aprovar cadastros, ver os registros de todos, mudar cargos e excluir contas.'
+          : 'Essa pessoa volta a ser colaborador e deixa de ver a área Admin e as vendas.'}</p>`,
         botoes: [
-          { label: virarAdmin ? 'Tornar admin master' : 'Mudar para colaborador', acao: () => {
-            const antes = u.papel === 'admin' ? 'admin master' : 'colaborador';
-            u.papel = novo;
-            registrar('Alterou cargo', `${u.nome}: ${antes} → ${virarAdmin ? 'admin master' : 'colaborador'}`);
-            save(); fecharModal(); toast('Cargo alterado'); desenharEquipe(); desenharRegistros();
-          } },
+          { label: virarAdmin ? 'Tornar admin master' : 'Mudar para colaborador',
+            acao: (ev) => atualizarPerfil(ev.currentTarget, u, { papel: novo }, 'Cargo alterado') },
           { label: 'Cancelar', cls: 'btn-ghost', acao: voltar }
         ]
       });
@@ -1185,33 +1402,35 @@
       abrirModal({
         titulo: `Excluir a conta de ${esc(u.nome)}?`,
         alerta: true,
-        corpo: `<p class="muted">${esc(u.email)} não vai mais conseguir entrar no sistema. ${n ? `Os ${plural(n, 'vídeo', 'vídeos')} e registros dessa pessoa continuam no histórico.` : ''}</p>`,
+        corpo: `<p class="muted">${esc(u.email)} não vai mais conseguir usar o sistema. ${n ? `Os ${plural(n, 'vídeo', 'vídeos')} e registros dessa pessoa continuam no histórico.` : ''}</p>`,
         botoes: [
-          { label: 'Excluir conta', cls: 'btn-red', acao: () => {
-            u.excluido = true; u.papel = 'colaborador';
-            registrar('Excluiu conta', `${u.nome} (${u.email})`);
-            save(); fecharModal(); toast('Conta excluída'); desenharGrafico(); desenharEquipe(); desenharRegistros();
-          } },
-          { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
-        ]
-      });
-    });
-
-    $('#reset').addEventListener('click', () => {
-      abrirModal({
-        titulo: 'Restaurar os dados de exemplo?',
-        corpo: '<p class="muted">Tudo o que foi alterado neste navegador será desfeito, inclusive cargos e contas excluídas.</p>',
-        botoes: [
-          { label: 'Restaurar', acao: () => {
-            const sess = state.sessao;
-            state = seedState(); state.sessao = usuario(sess).excluido ? 'u1' : sess; save();
-            fecharModal(); toast('Dados de exemplo restaurados'); render();
-          } },
+          { label: 'Excluir conta', cls: 'btn-red', acao: (ev) => atualizarPerfil(ev.currentTarget, u, { ativo: false }, 'Conta excluída') },
           { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
         ]
       });
     });
   };
 
-  render();
+  // Texto legível de um registro do histórico (traduz as mudanças guardadas pelo banco)
+  const ROTULOS = { local: 'local', prateleira: 'prateleira', descricao: 'descrição', quantidade: 'peças',
+    fabricante_id: 'fabricante', link_tiktok: 'link', produto_id: 'produto', conta_id: 'conta', vendido_em: 'data' };
+  function valorLegivel(campo, v) {
+    if (v === null || v === undefined || v === '') return 'vazio';
+    if (campo === 'fabricante_id') { const f = state.fabricantes.find((x) => x.id === v); return f ? f.nome : '?'; }
+    if (campo === 'produto_id') { const p = produto(String(v)); return p ? p.prateleira : '?'; }
+    if (campo === 'conta_id') return state.contaNome[v] || '?';
+    if (campo === 'vendido_em') return fmtDia(v);
+    return String(v);
+  }
+  function detalheRegistro(r) {
+    if (!r.mudancas || !Object.keys(r.mudancas).length) return r.detalhe;
+    const partes = Object.entries(r.mudancas).map(([k, m]) => k === 'link_tiktok'
+      ? (m.para ? (m.de ? 'link atualizado' : 'link adicionado') : 'link removido')
+      : `${ROTULOS[k] || k} ${valorLegivel(k, m.de)} → ${valorLegivel(k, m.para)}`);
+    if (r.acao === 'Editou produto') return `${r.detalhe.split(':')[0]}: ${partes.join(', ')}`;
+    if (r.acao === 'Editou venda') return `${r.detalhe}: ${partes.join(', ')}`;
+    return r.detalhe;
+  }
+
+  iniciar();
 })();

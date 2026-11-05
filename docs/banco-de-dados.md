@@ -30,6 +30,8 @@ erDiagram
     enum papel "admin | colaborador"
     bool fixo "admin master fixo"
     bool ativo "false = conta excluída"
+    bool aprovado "liberado pelo admin"
+    bool senha_provisoria
     timestamptz excluido_em
   }
   CONTAS_TIKTOK {
@@ -115,6 +117,8 @@ Essas regras valem mesmo que alguém tente burlar o site, porque ficam no própr
 | Regra | Como |
 |---|---|
 | Sem login, ninguém vê nada | Nenhuma permissão para o papel `anon` |
+| Conta nova só acessa depois de aprovada por um admin master | Campo `aprovado` + `usuario_ativo()` |
+| Senha provisória obriga a criar senha própria; só a própria pessoa confirma a troca | Campo `senha_provisoria` + gatilho `proteger_perfil` |
 | Conta excluída perde o acesso | Todas as regras exigem `ativo = true` |
 | Data e hora do vídeo são as do servidor | Gatilho `carimbar_video` ignora o que vier do celular |
 | O vídeo fica em nome de quem está logado | Mesmo gatilho |
@@ -133,7 +137,7 @@ Essas regras valem mesmo que alguém tente burlar o site, porque ficam no própr
 ## Projeto no Supabase
 
 O banco já está criado no Supabase: projeto **gerenciador-estoque-videos**, região São Paulo
-(`sa-east-1`), com as três migrações aplicadas e os 239 produtos carregados. O verificador de
+(`sa-east-1`), com as quatro migrações aplicadas e os 239 produtos carregados. O verificador de
 segurança do Supabase não aponta nenhum problema.
 
 As funções internas (permissões e gatilhos) ficam no schema `privado`, que não é exposto pela
@@ -143,8 +147,8 @@ API; só as tabelas e views do schema `public` são acessíveis, sempre filtrada
 
 1. Crie um projeto em supabase.com (região **São Paulo**, `sa-east-1`).
 2. Abra **SQL Editor** e rode, nesta ordem, os arquivos da pasta `supabase/migrations/`:
-   `20261104000000_esquema_inicial.sql`, `20261105000000_vendas.sql` e
-   `20261105010000_ajustes_seguranca.sql`.
+   `20261104000000_esquema_inicial.sql`, `20261105000000_vendas.sql`,
+   `20261105010000_ajustes_seguranca.sql` e `20261105020000_aprovacao_cadastro.sql`.
 3. No mesmo lugar, cole e rode `supabase/seed.sql` (contas, fabricantes e os 239 produtos).
 4. Em **Authentication → Providers**, deixe o login por e-mail e senha ativado.
 5. Peça para o Ricardo e o Márcio criarem a conta pela tela de cadastro do sistema.
@@ -156,15 +160,13 @@ automaticamente no ambiente local.
 ## Testes
 
 `bash tools/testar_banco.sh` sobe um PostgreSQL temporário, aplica o esquema e a carga inicial e
-testa 44 regras como colaboradora, admin fixo, outro admin, conta excluída e visitante sem login.
+testa 52 regras como colaboradora, admin fixo, outro admin, conta excluída e visitante sem login.
 Precisa do PostgreSQL instalado na máquina.
 
 ## Pontos para decidir com o cliente
 
-- **Quem pode se cadastrar.** Do jeito que está, qualquer pessoa com o link do site consegue
-  criar conta e já entra como colaborador, vendo e editando o estoque. Duas opções:
-  (a) desligar o cadastro público no Supabase e o admin convida cada pessoa por e-mail, ou
-  (b) toda conta nova nasce "pendente" até um admin aprovar.
+- **Cadastro com aprovação (decidido).** Toda conta nova nasce aguardando aprovação e não vê nada
+  até um admin master aprovar.
 - **Conta excluída ainda consegue fazer login**, mas não vê nem altera nada. Para bloquear o
   login de vez, é preciso uma pequena função no servidor (Edge Function) chamada pelo botão Excluir.
 - **O ID automático pode pular números.** Se um cadastro falhar no meio (por exemplo, prateleira

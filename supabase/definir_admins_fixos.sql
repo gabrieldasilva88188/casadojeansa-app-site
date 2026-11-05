@@ -7,11 +7,11 @@
 -- Troque os e-mails abaixo pelos e-mails reais que eles usaram no cadastro.
 
 update public.perfis
-set papel = 'admin', fixo = true
+set papel = 'admin', fixo = true, aprovado = true
 where email in (
   'ricardo@exemplo.com',   -- Ricardo Ronery
   'marcio@exemplo.com'     -- Márcio House
 );
 
 -- Confere o resultado: devem aparecer as duas linhas com papel = admin e fixo = true
-select nome, email, papel, fixo from public.perfis where fixo;
+select nome, email, papel, fixo, aprovado from public.perfis where fixo;

@@ -57,6 +57,52 @@ select teste.confere((select count(*) = 2 from public.perfis where fixo and pape
   'Ricardo e Márcio viram admins master fixos');
 
 -- =====================================================================
+-- Cadastro com aprovação
+-- =====================================================================
+select set_config('request.jwt.claim.sub', teste.id_de('ketlin@exemplo.com'), false);
+set role authenticated;
+select teste.confere((select count(*) = 0 from public.produtos), 'cadastro aguardando aprovação não vê o estoque');
+select teste.confere((select count(*) = 1 from public.perfis), 'cadastro aguardando aprovação vê só o próprio perfil');
+select teste.barrado($$ update public.perfis set aprovado = true where email = 'ketlin@exemplo.com' $$,
+  'ninguém aprova o próprio cadastro');
+reset role;
+
+select set_config('request.jwt.claim.sub', teste.id_de('ricardo@exemplo.com'), false);
+set role authenticated;
+update public.perfis set aprovado = true
+where email in ('ketlin@exemplo.com', 'mariana@exemplo.com', 'gustavo@exemplo.com');
+select teste.confere((select count(*) = 3 from public.registros where acao = 'Aprovou cadastro'
+                        and usuario_id = teste.id_de('ricardo@exemplo.com')::uuid),
+  'admin aprova cadastros e a aprovação entra nos registros');
+reset role;
+
+-- Um cadastro recusado
+insert into auth.users (email, raw_user_meta_data) values ('intruso@exemplo.com', '{"nome": "Pessoa Desconhecida"}');
+select set_config('request.jwt.claim.sub', teste.id_de('marcio@exemplo.com'), false);
+set role authenticated;
+update public.perfis set ativo = false where email = 'intruso@exemplo.com';
+select teste.confere((select count(*) = 1 from public.registros where acao = 'Recusou cadastro'),
+  'admin recusa cadastro e a recusa entra nos registros');
+reset role;
+
+-- Senha provisória (marcada pelo responsável técnico, sem usuário logado)
+select set_config('request.jwt.claim.sub', '', false);
+update public.perfis set senha_provisoria = true where fixo;
+select set_config('request.jwt.claim.sub', teste.id_de('ketlin@exemplo.com'), false);
+set role authenticated;
+select teste.barrado($$ update public.perfis set senha_provisoria = false where email = 'ricardo@exemplo.com' $$,
+  'só a própria pessoa confirma a troca da senha provisória');
+reset role;
+select set_config('request.jwt.claim.sub', teste.id_de('ricardo@exemplo.com'), false);
+set role authenticated;
+update public.perfis set senha_provisoria = false where email = 'ricardo@exemplo.com';
+select teste.confere((select not senha_provisoria from public.perfis where email = 'ricardo@exemplo.com'),
+  'a própria pessoa confirma que trocou a senha provisória');
+select teste.barrado($$ update public.perfis set senha_provisoria = true where email = 'ketlin@exemplo.com' $$,
+  'o app não marca senha provisória em ninguém');
+reset role;
+
+-- =====================================================================
 -- Como COLABORADORA (Ketlin)
 -- =====================================================================
 select set_config('request.jwt.claim.sub', teste.id_de('ketlin@exemplo.com'), false);
