@@ -24,7 +24,7 @@
     const [contas, fabs, prods, vids, perfis, vendas, regs] = await Promise.all([
       db.listar('contas_tiktok', 'select=id,nome,ordem,ativa&order=ordem,nome'),
       db.listar('fabricantes', 'select=id,nome&order=nome'),
-      db.listar('produtos', 'select=id,local,prateleira,descricao,quantidade,fabricante_id,link_tiktok,criado_em&order=id'),
+      db.listar('produtos', 'select=id,local,prateleira,descricao,quantidade,fabricante_id,link_tiktok,criado_em,excluido_em&order=id'),
       db.listar('videos', 'select=id,produto_id,conta_id,usuario_id,postado_em&order=postado_em.desc,id.desc'),
       db.listar('perfis', 'select=id,nome,email,papel,fixo,ativo,aprovado,criado_em&order=nome'),
       admin ? db.listar('vendas', 'select=id,produto_id,conta_id,quantidade,vendido_em,criado_por,criado_em&order=vendido_em.desc,id.desc') : [],
@@ -35,9 +35,11 @@
     state.contas = contas.filter((c) => c.ativa).map((c) => c.nome);
     state.fabricantes = fabs;
     const nomeFab = Object.fromEntries(fabs.map((f) => [f.id, f.nome]));
-    state.produtos = prods.map((x) => ({ id: String(x.id), num: x.id, local: x.local, prateleira: x.prateleira,
+    // produtosTodos inclui os excluídos (para vídeos, vendas e histórico); produtos = só os da lista
+    state.produtosTodos = prods.map((x) => ({ id: String(x.id), num: x.id, local: x.local, prateleira: x.prateleira,
       descricao: x.descricao, quantidade: x.quantidade, fabricante: nomeFab[x.fabricante_id] || '',
-      link: x.link_tiktok || '', criadoEm: x.criado_em }));
+      link: x.link_tiktok || '', criadoEm: x.criado_em, excluido: !!x.excluido_em }));
+    state.produtos = state.produtosTodos.filter((x) => !x.excluido);
     state.videos = vids.map((v) => ({ id: String(v.id), produtoId: String(v.produto_id), usuarioId: v.usuario_id,
       conta: state.contaNome[v.conta_id] || '?', data: v.postado_em }));
     state.usuarios = perfis.map((u) => ({ id: u.id, nome: u.nome, email: u.email, papel: u.papel, fixo: u.fixo,
@@ -126,7 +128,7 @@
   const nomeDe = (id) => { const u = usuario(id); return u.nome + (u.excluido ? ' (conta excluída)' : ''); };
   const ativos = () => state.usuarios.filter((u) => !u.excluido && u.aprovado);
   const pendentes = () => state.usuarios.filter((u) => !u.excluido && !u.aprovado);
-  const produto = (id) => state.produtos.find((p) => p.id === id);
+  const produto = (id) => (state.produtosTodos || state.produtos).find((p) => p.id === id);
   const eu = () => state.sessao && usuario(state.sessao);
   const agora = () => new Date();
   const diasDesde = (iso) => Math.max(0, Math.floor((agora() - new Date(iso)) / 86400000));
@@ -518,6 +520,7 @@
               <td class="hide-sm c-acoes"><div class="row-actions">
                 ${p.link ? `<a class="btn btn-ghost btn-sm btn-tiktok" href="${esc(p.link)}" target="_blank" rel="noopener" aria-label="Abrir ${esc(p.prateleira)} no TikTok Shop">${ICON.link}<span>TikTok Shop</span></a>` : ''}
                 <button class="btn btn-ghost btn-sm" type="button" data-editar="${p.id}">Editar</button>
+                ${eu().papel === 'admin' ? `<button class="btn btn-danger-ghost btn-sm" type="button" data-excluir-produto="${p.id}">Excluir</button>` : ''}
               </div></td></tr>`;
           }).join('')}</tbody></table></div>
         ${lista.length > F.limite ? `<p style="margin-top:14px"><button class="btn btn-ghost btn-sm" type="button" id="mais-prod">Mostrar mais ${Math.min(POR_PAGINA, lista.length - F.limite)} de ${lista.length - F.limite}</button></p>` : ''}`;
@@ -533,8 +536,35 @@
     $('#lista').addEventListener('click', (e) => {
       const b = e.target.closest('[data-editar]');
       if (b) { state.editId = b.dataset.editar; ir('produto-editar'); }
+      const x = e.target.closest('[data-excluir-produto]');
+      if (x) excluirProduto(produto(x.dataset.excluirProduto));
     });
   };
+
+  // Excluir produto (só admin master). Sai da lista e libera a prateleira; vídeos, vendas e histórico ficam.
+  function excluirProduto(p) {
+    if (!p) return;
+    const nv = videosDe(p.id).length, ns = (state.vendas || []).filter((v) => v.produtoId === p.id).length;
+    const fica = [nv ? plural(nv, 'vídeo', 'vídeos') : '', ns ? plural(ns, 'venda', 'vendas') : ''].filter(Boolean).join(' e ');
+    abrirModal({
+      titulo: `Excluir ${esc(p.prateleira)} ${esc(descricao(p))}?`,
+      alerta: true,
+      corpo: `<p class="muted">O produto sai da lista e a prateleira ${esc(p.prateleira)} fica livre para outra peça.
+        ${fica ? `Continuam guardados no histórico: ${fica}.` : ''} A exclusão fica registrada.</p>
+        <ul class="diff"><li><b>ID</b><span>${idTxt(p)}</span></li><li><b>Peças</b><span>${p.quantidade}</span></li>
+        <li><b>Fabricante</b><span>${esc(p.fabricante || 'não informado')}</span></li></ul>`,
+      botoes: [
+        { label: 'Excluir produto', cls: 'btn-red', acao: async (e) => {
+          const ok = await executar(e.currentTarget, async () => {
+            await db.alterar('produtos', `id=eq.${p.id}`, { excluido_em: new Date().toISOString() });
+            await carregarDados();
+          }, 'Produto excluído');
+          if (ok) { fecharModal(); if (location.hash === '#produtos') render(); else ir('produtos'); }
+        } },
+        { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
+      ]
+    });
+  }
 
   // Formulário compartilhado entre adicionar e editar (mesmas colunas da planilha)
   function formProduto(p) {
@@ -635,7 +665,7 @@
 
   PAGINAS['produto-editar'] = function (aviso) {
     const p = produto(state.editId);
-    if (!p) { ir('produtos'); return; }
+    if (!p || p.excluido) { ir('produtos'); return; }
     const hist = state.registros.filter((r) => r.tabela === 'produtos' && r.registroId === p.id).slice(0, 6);
     const nv = videosDe(p.id).length, ult = ultimoVideo(p.id);
     shell('produtos', `
@@ -651,7 +681,12 @@
           <li><span class="avatar">${iniciais(usuario(r.usuarioId).nome)}</span>
           <div><b>${esc(nomeDe(r.usuarioId))}</b> ${esc(r.acao.toLowerCase())}: ${esc(detalheRegistro(r).replace(/^[A-Z]{1,2}\d{1,2}[: ]\s?/, ''))}<br><time>${fmtData(r.data)}</time></div></li>`).join('')}</ul>`
           : `<p class="muted">${eu().papel === 'admin' ? 'Nenhuma alteração registrada ainda.' : 'O histórico completo fica na área do admin master.'}</p>`}
-      </section>`);
+      </section>
+      ${eu().papel === 'admin' ? `<section class="panel form-panel zona-perigo">
+        <div><h2>Excluir produto</h2><p class="muted">Tira o produto da lista e libera a prateleira ${esc(p.prateleira)}. Vídeos, vendas e histórico continuam guardados.</p></div>
+        <button class="btn btn-danger-ghost" type="button" id="b-excluir-prod">Excluir produto</button>
+      </section>` : ''}`);
+    const bx = $('#b-excluir-prod'); if (bx) bx.addEventListener('click', () => excluirProduto(p));
     $('#f-prod').addEventListener('submit', (e) => {
       e.preventDefault();
       const d = lerFormProduto(p.id);
@@ -1237,7 +1272,7 @@
         <div class="notice">${ICON.alerta}<span>Esta área é só para o admin master. Peça acesso ao responsável pela loja.</span></div>`);
       return;
     }
-    const acoes = ['Adicionou produto', 'Editou produto', 'Registrou vídeo', 'Adicionou venda', 'Editou venda', 'Excluiu venda',
+    const acoes = ['Adicionou produto', 'Editou produto', 'Excluiu produto', 'Restaurou produto', 'Registrou vídeo', 'Adicionou venda', 'Editou venda', 'Excluiu venda',
       'Criou conta', 'Aprovou cadastro', 'Recusou cadastro', 'Alterou cargo', 'Excluiu conta', 'Reativou conta', 'Importou planilha'];
     shell('admin', `
       <div class="page-head"><div><h1>Admin master</h1><p>Cadastros novos, vídeos de cada pessoa, a equipe e tudo o que foi alterado no sistema.</p></div></div>

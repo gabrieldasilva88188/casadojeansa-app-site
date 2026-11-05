@@ -351,6 +351,9 @@ tr.apagado td { opacity: .4; }
 .auth-box > .btn { align-self: stretch; }
 .btn:disabled { opacity: .6; cursor: progress; }
 
+.zona-perigo { display: flex; flex-wrap: wrap; gap: 16px; align-items: center; justify-content: space-between; border-color: var(--line); }
+.zona-perigo p { font-size: .9rem; max-width: 52ch; margin-top: 4px; }
+
 /* ---------- Vendas ---------- */
 .chips { display: flex; flex-wrap: wrap; gap: 8px; }
 .chip {

@@ -211,6 +211,35 @@ select teste.barrado($$ select * from public.produtos $$, 'visitante sem login n
 reset role;
 
 -- =====================================================================
+-- Excluir produto (só admin master; o histórico fica)
+-- =====================================================================
+select set_config('request.jwt.claim.sub', teste.id_de('ketlin@exemplo.com'), false);
+set role authenticated;
+select teste.barrado($$ update public.produtos set excluido_em = now() where prateleira = 'A3' $$,
+  'colaborador não exclui produto (marcando como excluído)');
+reset role;
+
+select set_config('request.jwt.claim.sub', teste.id_de('ricardo@exemplo.com'), false);
+set role authenticated;
+update public.produtos set excluido_em = now() where prateleira = 'A1';
+select teste.confere((select excluido_em is not null and excluido_por = teste.id_de('ricardo@exemplo.com')::uuid
+                      from public.produtos where id = 1),
+  'admin exclui produto com vídeo; a linha continua para o histórico');
+select teste.confere((select count(*) = 1 from public.registros where acao = 'Excluiu produto'),
+  'exclusão de produto entra nos registros');
+select teste.confere((select count(*) = 1 from public.videos where produto_id = 1),
+  'vídeos do produto excluído continuam no histórico');
+insert into public.produtos (local, prateleira, descricao, quantidade) values (1, 'A1', 'PECA NOVA NA A1', 2);
+select teste.confere((select count(*) = 2 from public.produtos where prateleira = 'A1'),
+  'a prateleira do produto excluído fica livre para outra peça');
+select teste.barrado($$ insert into public.videos (produto_id, conta_id) values (1, 1) $$,
+  'não registra vídeo de produto excluído');
+select teste.barrado($$ update public.produtos set quantidade = 9 where id = 1 $$,
+  'produto excluído não pode ser editado');
+update public.produtos set excluido_em = null where prateleira = 'A1' and descricao = 'PECA NOVA NA A1';
+reset role;
+
+-- =====================================================================
 -- Vendas (só admin master)
 -- =====================================================================
 select set_config('request.jwt.claim.sub', teste.id_de('ketlin@exemplo.com'), false);
@@ -222,21 +251,21 @@ reset role;
 select set_config('request.jwt.claim.sub', teste.id_de('ricardo@exemplo.com'), false);
 set role authenticated;
 insert into public.vendas (produto_id, conta_id, quantidade, vendido_em)
-values (1, (select id from public.contas_tiktok where nome = 'SHAMA'), 3, current_date - 1);
+values (2, (select id from public.contas_tiktok where nome = 'SHAMA'), 3, current_date - 1);
 select teste.confere((select count(*) = 1 and bool_and(criado_por = teste.id_de('ricardo@exemplo.com')::uuid) from public.vendas),
   'admin lança venda e fica registrado quem lançou');
-update public.vendas set quantidade = 4 where produto_id = 1;
-select teste.confere((select quantidade = 4 from public.vendas where produto_id = 1), 'admin edita venda');
+update public.vendas set quantidade = 4 where produto_id = 2;
+select teste.confere((select quantidade = 4 from public.vendas where produto_id = 2), 'admin edita venda');
 select teste.confere((select mudancas -> 'quantidade' ->> 'para' = '4' from public.registros
                       where acao = 'Editou venda' order by id desc limit 1),
   'edição de venda entra nos registros com o antes e o depois');
-select teste.confere((select sum(pecas_vendidas) = 4 from public.v_vendas_semana where conta = 'SHAMA' and prateleira = 'A1'),
+select teste.confere((select sum(pecas_vendidas) = 4 from public.v_vendas_semana where conta = 'SHAMA' and prateleira = 'A2'),
   'v_vendas_semana: peças vendidas por produto, conta e semana');
 select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade) values (1, 1, 0) $$,
   'venda precisa ter pelo menos 1 peça');
 select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade, vendido_em) values (1, 1, 1, current_date + 10) $$,
   'venda não pode ter data no futuro');
-delete from public.vendas where produto_id = 1;
+delete from public.vendas where produto_id = 2;
 select teste.confere((select count(*) = 0 from public.vendas) and
                      (select count(*) = 1 from public.registros where acao = 'Excluiu venda'),
   'admin exclui venda e a exclusão fica nos registros');
@@ -252,11 +281,11 @@ reset role;
 -- =====================================================================
 select set_config('request.jwt.claim.sub', teste.id_de('ricardo@exemplo.com'), false);
 set role authenticated;
-select teste.confere((select total_videos = 1 and id_exibicao = '#0001' and dias_sem_video = 0
+select teste.confere((select count(*) = 1 and bool_and(total_videos = 0 and descricao = 'PECA NOVA NA A1')
                       from public.v_produtos_resumo where prateleira = 'A1'),
-  'v_produtos_resumo: vídeos, ID #0001 e dias sem vídeo');
-select teste.confere((select count(*) = 239 from public.v_produtos_resumo where total_videos = 0),
-  'v_produtos_resumo: 239 produtos ainda sem vídeo');
+  'v_produtos_resumo: mostra só o produto ativo da prateleira A1');
+select teste.confere((select count(*) = 0 from public.v_produtos_resumo where id = 1),
+  'v_produtos_resumo: produto excluído não aparece');
 select teste.confere((select sum(videos) = 1 from public.v_videos_semana where conta = 'SHAMA'),
   'v_videos_semana: vídeo contado na conta e semana certas');
 select teste.confere((select videos_7_dias = 1 from public.v_videos_por_pessoa where nome = 'Ketlin Raiane'),

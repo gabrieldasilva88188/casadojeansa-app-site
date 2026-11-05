@@ -377,7 +377,7 @@ insert into public.produtos (id, local, prateleira, descricao, quantidade, fabri
   (237, 2, 'W1', 'CALCA JANS SKINNY FEMININA CINTURA ALT', 1, (select id from public.fabricantes where nome = 'PREMIUM JEANS')),
   (238, 2, 'W2', 'CALCA MASCULINA JOGGER MOLETINHO LEV', 2, (select id from public.fabricantes where nome = 'NORTEN')),
   (239, 2, 'W3', 'CALCA WID LEG PANTALONA CARGO', 2, (select id from public.fabricantes where nome = 'KAVI JEANS'))
-on conflict (prateleira) do nothing;
+on conflict (prateleira) where excluido_em is null do nothing;
 
 -- Próximo produto cadastrado no sistema continua a numeração
 select setval(pg_get_serial_sequence('public.produtos', 'id'), (select max(id) from public.produtos));

@@ -57,7 +57,7 @@ def gerar_seed(produtos, destino):
     for i, p in enumerate(produtos, start=1):
         fab = f"(select id from public.fabricantes where nome = {sql_txt(p['fabricante'])})" if p["fabricante"] else "null"
         valores.append(f"  ({i}, {p['local']}, {sql_txt(p['prateleira'])}, {sql_txt(p['descricao'])}, {p['quantidade']}, {fab})")
-    linhas += [",\n".join(valores), "on conflict (prateleira) do nothing;", "",
+    linhas += [",\n".join(valores), "on conflict (prateleira) where excluido_em is null do nothing;", "",
                "-- Próximo produto cadastrado no sistema continua a numeração",
                "select setval(pg_get_serial_sequence('public.produtos', 'id'), (select max(id) from public.produtos));",
                "", "alter table public.produtos enable trigger registrar_produto;",

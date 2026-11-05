@@ -56,6 +56,7 @@ erDiagram
     uuid criado_por FK
     timestamptz atualizado_em
     uuid atualizado_por FK
+    timestamptz excluido_em "produto excluído"
   }
   VIDEOS {
     bigint id PK
@@ -129,7 +130,8 @@ Essas regras valem mesmo que alguém tente burlar o site, porque ficam no própr
 | Vendas: só admin master vê, lança, edita e exclui | RLS |
 | Venda tem pelo menos 1 peça e não pode ter data no futuro | Validação no banco |
 | Produto com vídeo ou venda não pode ser apagado | Chave estrangeira `on delete restrict` |
-| Duas peças não ocupam a mesma prateleira | `prateleira` única |
+| Duas peças não ocupam a mesma prateleira | `prateleira` única entre os produtos não excluídos |
+| Excluir produto: só admin master; o produto sai da lista, a prateleira fica livre e vídeos, vendas e histórico continuam | Campos `excluido_em`/`excluido_por` + gatilho `proteger_produto` |
 | Nº de prateleira no padrão da planilha (A1, M12) | Validação no banco |
 | Toda alteração vai para o histórico, com antes e depois | Gatilho `registrar_alteracao` |
 | "Excluir conta" não apaga a pessoa | O histórico dela continua; `excluido_em` guarda a data |
@@ -137,7 +139,7 @@ Essas regras valem mesmo que alguém tente burlar o site, porque ficam no própr
 ## Projeto no Supabase
 
 O banco já está criado no Supabase: projeto **gerenciador-estoque-videos**, região São Paulo
-(`sa-east-1`), com as quatro migrações aplicadas e os 239 produtos carregados. O verificador de
+(`sa-east-1`), com as cinco migrações aplicadas e os 239 produtos carregados. O verificador de
 segurança do Supabase não aponta nenhum problema.
 
 As funções internas (permissões e gatilhos) ficam no schema `privado`, que não é exposto pela
@@ -148,7 +150,8 @@ API; só as tabelas e views do schema `public` são acessíveis, sempre filtrada
 1. Crie um projeto em supabase.com (região **São Paulo**, `sa-east-1`).
 2. Abra **SQL Editor** e rode, nesta ordem, os arquivos da pasta `supabase/migrations/`:
    `20261104000000_esquema_inicial.sql`, `20261105000000_vendas.sql`,
-   `20261105010000_ajustes_seguranca.sql` e `20261105020000_aprovacao_cadastro.sql`.
+   `20261105010000_ajustes_seguranca.sql`, `20261105020000_aprovacao_cadastro.sql` e
+   `20261105030000_excluir_produto.sql`.
 3. No mesmo lugar, cole e rode `supabase/seed.sql` (contas, fabricantes e os 239 produtos).
 4. Em **Authentication → Providers**, deixe o login por e-mail e senha ativado.
 5. Peça para o Ricardo e o Márcio criarem a conta pela tela de cadastro do sistema.
@@ -160,7 +163,7 @@ automaticamente no ambiente local.
 ## Testes
 
 `bash tools/testar_banco.sh` sobe um PostgreSQL temporário, aplica o esquema e a carga inicial e
-testa 52 regras como colaboradora, admin fixo, outro admin, conta excluída e visitante sem login.
+testa 59 regras como colaboradora, admin fixo, outro admin, conta excluída e visitante sem login.
 Precisa do PostgreSQL instalado na máquina.
 
 ## Pontos para decidir com o cliente
