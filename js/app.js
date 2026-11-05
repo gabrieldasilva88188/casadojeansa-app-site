@@ -560,7 +560,8 @@
           <div class="field span-2"><label for="v-prod">Produto do vídeo</label>
             <input class="input" id="v-prod" list="lista-prod" placeholder="Digite a prateleira (ex.: A1) ou parte da descrição" autocomplete="off">
             <datalist id="lista-prod">${opcoes.map((p) => `<option value="${esc(p.prateleira + ' - ' + descricao(p))}">`).join('')}</datalist>
-            <span class="err" data-err="prod"></span></div>
+            <span class="err" data-err="prod"></span>
+            <div id="v-prod-info" class="prod-info" aria-live="polite" hidden></div></div>
           <div class="field"><label for="v-conta">Conta do TikTok</label>
             <select class="input" id="v-conta"><option value="">Em qual conta foi postado?</option>
               ${state.contas.map((c) => `<option value="${esc(c)}">${esc(c)}</option>`).join('')}</select>
@@ -585,6 +586,35 @@
       </section>`);
 
     relogioTimer = setInterval(() => { const el = $('#v-agora'); if (el) el.textContent = fmtDataCompleta(agora()); }, 1000);
+
+    // Ao escolher o produto, mostra o link dele no TikTok Shop (ou avisa que falta cadastrar)
+    let mostrado = null;
+    const mostrarProduto = () => {
+      const box = $('#v-prod-info');
+      const txt = $('#v-prod').value.trim();
+      const p = txt ? acharProduto(txt) : null;
+      if ((p && p.id) === mostrado) return;   // mesmo produto: não redesenha (mantém o clique nos botões)
+      mostrado = p && p.id;
+      if (!p) { box.hidden = true; box.innerHTML = ''; return; }
+      box.hidden = false;
+      box.innerHTML = `
+        <div class="prod-info-head">
+          <span class="shelf">${esc(p.prateleira)}</span>
+          <div class="prod-info-txt"><b>${esc(descricao(p))}</b>
+            <span class="muted">${esc(p.fabricante || 'Fabricante não informado')}, ID ${idTxt(p)}, ${pillEstoque(p.quantidade)}</span></div>
+        </div>
+        ${p.link
+          ? `<a class="btn btn-tiktok-cta" href="${esc(p.link)}" target="_blank" rel="noopener">${ICON.link}Ver produto no TikTok Shop</a>
+             <span class="prod-info-url">${esc(p.link)}</span>`
+          : `<p class="prod-info-sem">Esta peça ainda não tem link do TikTok Shop.
+             <button type="button" class="link-btn" data-cadastrar-link="${p.id}">Cadastrar link</button></p>`}`;
+    };
+    $('#v-prod').addEventListener('input', mostrarProduto);
+    $('#v-prod').addEventListener('change', mostrarProduto);
+    $('#f-video').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-cadastrar-link]');
+      if (b) { state.editId = b.dataset.cadastrarLink; save(); ir('produto-editar'); }
+    });
 
     let limite = 20;
     const desenhar = () => {
