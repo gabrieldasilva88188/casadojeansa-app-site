@@ -455,3 +455,37 @@ table.semanas th.sel, table.semanas td.sel { background: var(--line-soft); }
   .demo-btns { grid-template-columns: minmax(0, 1fr); }
   .toolbar select.input { flex: 1 1 140px; }
 }
+
+/* ---------- Copiar link e sugestões da busca ---------- */
+.btn-copiar span { font-size: .82rem; }
+.btn-copiar.copiado { color: var(--ok); border-color: var(--ok); }
+.sugestoes {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 30;
+  list-style: none; margin: 0; padding: 6px; max-height: min(420px, 60vh); overflow-y: auto;
+  background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius);
+  box-shadow: 0 10px 30px rgba(15, 23, 34, .14);
+}
+.sugestoes li[role="option"] {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 12px; align-items: center;
+  padding: 9px 10px; border-radius: var(--radius-sm); cursor: pointer;
+}
+.sugestoes li[role="option"]:hover, .sugestoes li[aria-selected="true"] { background: var(--line-soft); }
+.sugestoes .shelf { font-size: .85rem; }
+.sug-txt { display: flex; flex-direction: column; min-width: 0; }
+.sug-desc { font-size: .92rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sug-meta { font-size: .78rem; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sugestoes mark { background: var(--rivet-bg); color: inherit; border-radius: 2px; padding: 0 1px; }
+.sug-vazio, .sug-mais { padding: 10px; font-size: .85rem; color: var(--muted); }
+.sug-mais { border-top: 1px solid var(--line-soft); margin-top: 4px; }
+.row-actions .btn { white-space: nowrap; }
+.sugestoes .shelf { min-width: 3.4em; padding-inline: 4px; }
+.sugestoes mark { padding: 0; }
+.btn-grupo { display: inline-flex; }
+.btn-grupo .btn-tiktok { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.btn-grupo .btn-copiar { border-top-left-radius: 0; border-bottom-left-radius: 0; margin-left: -1px; padding-inline: 10px; }
+.btn-copiar svg { width: 16px; height: 16px; }
+.btn-copiar .copiar-txt { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+@media (max-width: 720px) {
+  .btn-copiar .copiar-txt { position: static; width: auto; height: auto; overflow: visible; clip: auto; }
+  .btn-grupo .btn-copiar { padding-inline: 14px; }
+}

@@ -170,6 +170,8 @@
     busca: ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
     link: ic('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     alerta: ic('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'),
+    copiar: ic('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
+    certo: ic('<path d="m5 12 5 5 9-10"/>'),
     relogio: ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
     vendas: ic('<path d="M3 5h2l2.2 10.5a1 1 0 0 0 1 .8h8.9a1 1 0 0 0 1-.8L20 8H6.2"/><circle cx="9.5" cy="19.5" r="1.3"/><circle cx="16.5" cy="19.5" r="1.3"/>')
   };
@@ -460,7 +462,59 @@
   }
 
   // ---------- Produtos ----------
-  const F = { busca: '', local: '', letra: '', fab: '', limite: POR_PAGINA };
+  const F = { busca: '', local: '', letra: '', fab: '', limite: POR_PAGINA, unico: null };
+
+  // Busca: ignora maiúsculas e acentos ("calca" acha "CALÇA") e aceita palavras em qualquer ordem
+  const semAcento = (t) => String(t || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+  const termos = (q) => semAcento(q).replace(/^#/, '').split(/\s+/).filter(Boolean);
+  function casaBusca(p, ts) {
+    if (!ts.length) return true;
+    const prat = semAcento(p.prateleira), texto = semAcento(descricao(p) + ' ' + (p.fabricante || ''));
+    const num = String(p.num);
+    return ts.every((t) => prat.startsWith(t) || texto.includes(t) || (/^\d+$/.test(t) && num === String(Number(t))));
+  }
+  // Ordem das sugestões: prateleira exata, prateleira que começa igual, descrição que começa igual, o resto
+  function pesoBusca(p, ts) {
+    const t = ts[0] || '', prat = semAcento(p.prateleira), d = semAcento(descricao(p));
+    if (ts.length === 1 && prat === t) return 0;
+    if (ts.length === 1 && prat.startsWith(t)) return 1;
+    if (d.startsWith(ts.join(' '))) return 2;
+    return 3;
+  }
+  // Destaca no texto as partes que bateram com a busca
+  function marcar(texto, ts) {
+    const t = String(texto || ''), n = semAcento(t);
+    const marcas = new Array(t.length).fill(false);
+    ts.forEach((q) => { let i = n.indexOf(q); while (q && i >= 0) { for (let k = i; k < i + q.length; k++) marcas[k] = true; i = n.indexOf(q, i + q.length); } });
+    let out = '', aberto = false;
+    for (let i = 0; i < t.length; i++) {
+      if (marcas[i] !== aberto) { out += marcas[i] ? '<mark>' : '</mark>'; aberto = marcas[i]; }
+      out += esc(t[i]);
+    }
+    return out + (aberto ? '</mark>' : '');
+  }
+
+  // Copia o link do produto (com plano B para navegadores sem acesso à área de transferência)
+  async function copiarTexto(txt) {
+    try { if (navigator.clipboard && window.isSecureContext) { await navigator.clipboard.writeText(txt); return true; } } catch (e) { /* tenta o plano B */ }
+    const ta = document.createElement('textarea');
+    ta.value = txt; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    let ok = false; try { ok = document.execCommand('copy'); } catch (e) { ok = false; }
+    ta.remove();
+    return ok;
+  }
+  async function copiarLink(btn, p) {
+    if (!p || !p.link) return;
+    if (await copiarTexto(p.link)) {
+      toast(`Link de ${p.prateleira} copiado`);
+      const antes = btn.dataset.antes || btn.innerHTML; btn.dataset.antes = antes;
+      btn.classList.add('copiado'); btn.innerHTML = ICON.certo + '<span class="copiar-txt">Copiado!</span>';
+      clearTimeout(btn._t); btn._t = setTimeout(() => { btn.classList.remove('copiado'); btn.innerHTML = antes; }, 1800);
+    } else {
+      toast('Não deu para copiar. Segure o dedo no botão TikTok Shop e escolha "Copiar link".', true);
+    }
+  }
   const fabricantes = () => [...new Set(state.produtos.map((p) => p.fabricante).filter(Boolean))].sort();
   const letras = () => [...new Set(state.produtos.map((p) => (p.prateleira.match(/^[A-Z]+/) || [''])[0]).filter(Boolean))].sort();
   const ordemPrat = (a, b) => a.local - b.local || a.prateleira.localeCompare(b.prateleira, 'pt-BR', { numeric: true });
@@ -478,7 +532,9 @@
         <a class="btn" href="#produto-novo">${ICON.mais}Adicionar produto</a>
       </div>
       <div class="toolbar">
-        <div class="search">${ICON.busca}<input class="input" id="busca" type="search" placeholder="Buscar por prateleira, descrição, fabricante ou ID" value="${esc(F.busca)}" aria-label="Buscar produto"></div>
+        <div class="search">${ICON.busca}<input class="input" id="busca" type="search" placeholder="Buscar por prateleira, descrição, fabricante ou ID" value="${esc(F.busca)}"
+            aria-label="Buscar produto" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="sugestoes" autocomplete="off">
+          <ul class="sugestoes" id="sugestoes" role="listbox" aria-label="Produtos encontrados" hidden></ul></div>
         <select class="input" id="f-local" aria-label="Local"><option value="">Todos os locais</option>
           ${[1, 2].map((l) => `<option value="${l}" ${F.local == l ? 'selected' : ''}>Local ${l}</option>`).join('')}</select>
         <select class="input" id="f-letra" aria-label="Prateleira"><option value="">Todas as prateleiras</option>
@@ -490,10 +546,9 @@
       <div id="lista"></div>`);
 
     const desenhar = () => {
-      const q = F.busca.trim().toLowerCase();
+      const ts = termos(F.busca);
       const lista = state.produtos.filter((p) =>
-        (!q || p.prateleira.toLowerCase() === q || descricao(p).toLowerCase().includes(q) ||
-          p.fabricante.toLowerCase().includes(q) || idTxt(p) === (q.startsWith('#') ? q : '#' + q.padStart(4, '0')) || p.prateleira.toLowerCase().startsWith(q)) &&
+        (F.unico ? p.id === F.unico : casaBusca(p, ts)) &&
         (!F.local || p.local == F.local) &&
         (!F.letra || (p.prateleira.match(/^[A-Z]+/) || [''])[0] === F.letra) &&
         (!F.fab || p.fabricante === F.fab)).sort(ordemPrat);
@@ -504,7 +559,7 @@
       const vis = lista.slice(0, F.limite);
       const tituloVid = contaSel ? `Vídeos (${esc(contaSel)})` : 'Vídeos';
       $('#lista').innerHTML = `
-        <p class="muted" style="font-size:.85rem;margin-bottom:10px">${plural(lista.length, 'produto encontrado', 'produtos encontrados')}</p>
+        <p class="muted" style="font-size:.85rem;margin-bottom:10px">${F.unico ? `Mostrando só o produto escolhido. <button class="btn-text" type="button" id="ver-todos">Ver todos</button>` : plural(lista.length, 'produto encontrado', 'produtos encontrados')}</p>
         <div class="table-wrap"><table class="cards cards-lead">
           <thead><tr><th>Nº prat.</th><th>Produto</th><th class="r">Peças</th><th class="r hide-sm">${tituloVid}</th><th class="hide-sm">Último vídeo</th><th class="r hide-sm">Ações</th></tr></thead>
           <tbody>${vis.map((p) => {
@@ -518,17 +573,18 @@
               <td class="r num hide-sm" data-label="${tituloVid}">${nv}</td>
               <td class="hide-sm" data-label="Último vídeo">${ult ? dias(diasDesde(ult)) : '<span class="sem-video">nenhum</span>'}</td>
               <td class="hide-sm c-acoes"><div class="row-actions">
-                ${p.link ? `<a class="btn btn-ghost btn-sm btn-tiktok" href="${esc(p.link)}" target="_blank" rel="noopener" aria-label="Abrir ${esc(p.prateleira)} no TikTok Shop">${ICON.link}<span>TikTok Shop</span></a>` : ''}
+                ${p.link ? `<span class="btn-grupo"><a class="btn btn-ghost btn-sm btn-tiktok" href="${esc(p.link)}" target="_blank" rel="noopener" aria-label="Abrir ${esc(p.prateleira)} no TikTok Shop">${ICON.link}<span>TikTok Shop</span></a><button class="btn btn-ghost btn-sm btn-copiar" type="button" data-copiar-link="${p.id}" aria-label="Copiar link de ${esc(p.prateleira)}" title="Copiar link">${ICON.copiar}<span class="copiar-txt">Copiar link</span></button></span>` : ''}
                 <button class="btn btn-ghost btn-sm" type="button" data-editar="${p.id}">Editar</button>
                 ${eu().papel === 'admin' ? `<button class="btn btn-danger-ghost btn-sm" type="button" data-excluir-produto="${p.id}">Excluir</button>` : ''}
               </div></td></tr>`;
           }).join('')}</tbody></table></div>
         ${lista.length > F.limite ? `<p style="margin-top:14px"><button class="btn btn-ghost btn-sm" type="button" id="mais-prod">Mostrar mais ${Math.min(POR_PAGINA, lista.length - F.limite)} de ${lista.length - F.limite}</button></p>` : ''}`;
       const m = $('#mais-prod'); if (m) m.addEventListener('click', () => { F.limite += POR_PAGINA; desenhar(); });
+      const vt = $('#ver-todos'); if (vt) vt.addEventListener('click', () => { F.unico = null; F.busca = ''; $('#busca').value = ''; desenhar(); $('#busca').focus(); });
     };
     desenhar();
     const mudou = (fn) => (e) => { fn(e.target.value); F.limite = POR_PAGINA; desenhar(); };
-    $('#busca').addEventListener('input', mudou((v) => { F.busca = v; }));
+    ligarSugestoes(desenhar);
     $('#f-local').addEventListener('change', mudou((v) => { F.local = v; }));
     $('#f-letra').addEventListener('change', mudou((v) => { F.letra = v; }));
     $('#f-fab').addEventListener('change', mudou((v) => { F.fab = v; }));
@@ -538,8 +594,66 @@
       if (b) { state.editId = b.dataset.editar; ir('produto-editar'); }
       const x = e.target.closest('[data-excluir-produto]');
       if (x) excluirProduto(produto(x.dataset.excluirProduto));
+      const c = e.target.closest('[data-copiar-link]');
+      if (c) copiarLink(c, produto(c.dataset.copiarLink));
     });
   };
+
+  // Lista de sugestões embaixo da busca: mostra os produtos que combinam enquanto a pessoa digita
+  const MAX_SUG = 8;
+  function ligarSugestoes(desenhar) {
+    const inp = $('#busca'), ul = $('#sugestoes');
+    let itens = [], ativo = -1;
+    const fechar = () => { ul.hidden = true; inp.setAttribute('aria-expanded', 'false'); inp.removeAttribute('aria-activedescendant'); ativo = -1; };
+    const marcarAtivo = (i) => {
+      ativo = i;
+      [...ul.querySelectorAll('[role="option"]')].forEach((li, k) => li.setAttribute('aria-selected', k === i ? 'true' : 'false'));
+      const li = ul.querySelector(`[data-i="${i}"]`);
+      if (li) { inp.setAttribute('aria-activedescendant', li.id); li.scrollIntoView({ block: 'nearest' }); } else inp.removeAttribute('aria-activedescendant');
+    };
+    const abrir = () => {
+      const ts = termos(inp.value);
+      if (!ts.length) { fechar(); return; }
+      const todos = state.produtos.filter((p) => casaBusca(p, ts))
+        .sort((a, b) => pesoBusca(a, ts) - pesoBusca(b, ts) || ordemPrat(a, b));
+      itens = todos.slice(0, MAX_SUG);
+      if (!itens.length) {
+        ul.innerHTML = '<li class="sug-vazio">Nenhum produto encontrado</li>';
+      } else {
+        ul.innerHTML = itens.map((p, i) => `<li role="option" id="sug-${i}" data-i="${i}" aria-selected="false">
+            <span class="shelf">${marcar(p.prateleira, ts)}</span>
+            <span class="sug-txt"><span class="sug-desc">${marcar(descricao(p), ts)}</span>
+              <span class="sug-meta">${p.fabricante ? marcar(p.fabricante, ts) : 'Fabricante não informado'} · ID ${idTxt(p)} · Local ${p.local} · ${p.quantidade === 1 ? '1 peça' : p.quantidade + ' peças'}</span></span>
+          </li>`).join('') +
+          (todos.length > MAX_SUG ? `<li class="sug-mais">Mais ${todos.length - MAX_SUG} na lista abaixo</li>` : '');
+      }
+      ul.hidden = false; inp.setAttribute('aria-expanded', 'true'); ativo = -1;
+    };
+    const escolher = (i) => {
+      const p = itens[i]; if (!p) return;
+      F.unico = p.id; F.busca = `${p.prateleira} ${descricao(p)}`; inp.value = F.busca; F.limite = POR_PAGINA;
+      fechar(); desenhar();
+    };
+    inp.addEventListener('input', () => { F.busca = inp.value; F.unico = null; F.limite = POR_PAGINA; desenhar(); abrir(); });
+    inp.addEventListener('focus', () => { if (!F.unico && inp.value.trim()) abrir(); });
+    inp.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        if (ul.hidden) abrir();
+        if (!itens.length) return;
+        e.preventDefault();
+        const n = itens.length;
+        marcarAtivo(e.key === 'ArrowDown' ? (ativo + 1) % n : (ativo - 1 + n) % n);
+      } else if (e.key === 'Enter') {
+        if (!ul.hidden && ativo >= 0) { e.preventDefault(); escolher(ativo); } else fechar();
+      } else if (e.key === 'Escape' && !ul.hidden) { e.preventDefault(); fechar(); }
+    });
+    // mousedown (e não click) para escolher antes de a busca perder o foco
+    ul.addEventListener('mousedown', (e) => {
+      const li = e.target.closest('[data-i]'); if (!li) return;
+      e.preventDefault(); escolher(Number(li.dataset.i));
+    });
+    inp.addEventListener('blur', () => setTimeout(fechar, 120));
+  }
 
   // Excluir produto (só admin master). Sai da lista e libera a prateleira; vídeos, vendas e histórico ficam.
   function excluirProduto(p) {
