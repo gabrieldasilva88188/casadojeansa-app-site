@@ -170,6 +170,7 @@
     busca: ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
     link: ic('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     alerta: ic('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'),
+    qr: ic('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/>'),
     copiar: ic('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
     certo: ic('<path d="m5 12 5 5 9-10"/>'),
     relogio: ic('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
@@ -529,7 +530,10 @@
     shell('produtos', `
       <div class="page-head">
         <div><h1>Produtos</h1><p>${plural(state.produtos.length, 'produto', 'produtos')} e ${plural(total, 'peça', 'peças')} em estoque, nos locais 1 e 2.</p></div>
-        <a class="btn" href="#produto-novo">${ICON.mais}Adicionar produto</a>
+        <div class="head-acoes">
+          <button class="btn btn-ghost" type="button" id="b-escanear">${ICON.qr}Escanear QR</button>
+          <a class="btn" href="#produto-novo">${ICON.mais}Adicionar produto</a>
+        </div>
       </div>
       <div class="toolbar">
         <div class="search">${ICON.busca}<input class="input" id="busca" type="search" placeholder="Buscar por prateleira, descrição, fabricante ou ID" value="${esc(F.busca)}"
@@ -585,6 +589,7 @@
     desenhar();
     const mudou = (fn) => (e) => { fn(e.target.value); F.limite = POR_PAGINA; desenhar(); };
     ligarSugestoes(desenhar);
+    $('#b-escanear').addEventListener('click', escanearNaLista);
     $('#f-local').addEventListener('change', mudou((v) => { F.local = v; }));
     $('#f-letra').addEventListener('change', mudou((v) => { F.letra = v; }));
     $('#f-fab').addEventListener('change', mudou((v) => { F.fab = v; }));
@@ -680,6 +685,68 @@
     });
   }
 
+  // ---------- QR code do TikTok Shop colado na roupa ----------
+  // Produto ativo que já tem esse link (compara sem https/www/parâmetros)
+  function produtoDoLink(link, menosId) {
+    const k = LeitorQR.chaveLink(link);
+    return state.produtos.find((p) => p.link && p.id !== menosId && LeitorQR.chaveLink(p.link) === k);
+  }
+  function abrirProdutoEditar(p, msg) {
+    state.editId = String(p.id);
+    if (location.hash === '#produto-editar') render(); else ir('produto-editar');
+    if (msg) toast(msg);
+  }
+  // Texto lido não é um link: mensagem para o leitor mostrar e continuar lendo
+  const naoEhLink = (txt) => `Esse QR code não tem um link de produto${txt ? ` (diz "${String(txt).slice(0, 40)}")` : ''}. Tente o QR do TikTok Shop.`;
+
+  // Botão da tela de Produtos: produto já cadastrado abre a edição; senão, abre Adicionar com o link
+  function escanearNaLista() {
+    LeitorQR.abrir({
+      dica: 'Aponte a câmera para o QR code colado na roupa. Se o produto já estiver cadastrado, ele abre direto.',
+      aoLer: (txt, fechar) => {
+        const l = LeitorQR.lerLink(txt);
+        if (!l) return naoEhLink(txt);
+        fechar();
+        const p = produtoDoLink(l.link);
+        if (p) { abrirProdutoEditar(p, `Esse QR é da prateleira ${p.prateleira}: ${descricao(p)}`); return; }
+        state.linkDoQR = l.link;
+        ir('produto-novo');
+        if (!l.tiktok) toast('Atenção: esse link não é do TikTok.', true);
+      }
+    });
+  }
+
+  // Botão ao lado do campo de link (adicionar e editar)
+  function ligarBotaoQR(atual) {
+    const b = $('#b-qr-link'); if (!b) return;
+    b.addEventListener('click', () => LeitorQR.abrir({
+      aoLer: (txt, fechar) => {
+        const l = LeitorQR.lerLink(txt);
+        if (!l) return naoEhLink(txt);
+        fechar();
+        const outro = produtoDoLink(l.link, atual && atual.id);
+        const preencher = () => {
+          const inp = $('#p-link'); if (!inp) return;
+          inp.value = l.link; inp.setAttribute('aria-invalid', 'false');
+          const er = $('#f-prod [data-err="link"]'); if (er) er.textContent = '';
+          const h = $('#p-link-hint'); if (h) h.textContent = l.tiktok ? 'Link preenchido pelo QR code.' : 'Link preenchido pelo QR code. Atenção: não é um link do TikTok.';
+          inp.classList.add('flash'); setTimeout(() => inp.classList.remove('flash'), 1200);
+          toast('Link preenchido pelo QR code');
+        };
+        if (!outro) { preencher(); return; }
+        abrirModal({
+          titulo: 'Esse link já está cadastrado',
+          corpo: `<p class="muted">O QR code é do produto da prateleira <b>${esc(outro.prateleira)}</b>: ${esc(descricao(outro))} (ID ${idTxt(outro)}).</p>`,
+          botoes: [
+            { label: `Abrir ${esc(outro.prateleira)}`, acao: () => { fecharModal(); abrirProdutoEditar(outro); } },
+            { label: 'Usar o link mesmo assim', cls: 'btn-ghost', acao: () => { fecharModal(); preencher(); } },
+            { label: 'Cancelar', cls: 'btn-text', acao: fecharModal }
+          ]
+        });
+      }
+    }));
+  }
+
   // Formulário compartilhado entre adicionar e editar (mesmas colunas da planilha)
   function formProduto(p) {
     const v = p || { local: '', prateleira: '', descricao: '', quantidade: '', fabricante: '', link: '' };
@@ -704,7 +771,11 @@
             <datalist id="lista-fab">${fabricantes().map((f) => `<option value="${esc(f)}">`).join('')}</datalist>
             <span class="hint">Escolha da lista para não repetir o mesmo fabricante com outro nome.</span></div>
           <div class="field span-2"><label for="p-link">Link no TikTok Shop <span class="opt">(opcional)</span></label>
-            <input class="input" id="p-link" type="url" value="${esc(v.link)}" placeholder="https://www.tiktok.com/view/product/...">
+            <div class="input-com-botao">
+              <input class="input" id="p-link" type="url" value="${esc(v.link)}" placeholder="https://www.tiktok.com/view/product/...">
+              <button class="btn btn-ghost" type="button" id="b-qr-link" aria-label="Escanear o QR code do produto para preencher o link">${ICON.qr}<span>Escanear QR</span></button>
+            </div>
+            <span class="hint" id="p-link-hint">${p ? '' : 'Escaneie o QR code colado na roupa para preencher o link.'}</span>
             <span class="err" data-err="link"></span></div>
         </div>
         <div class="form-actions" style="margin-top:22px">
@@ -749,7 +820,13 @@
         <a class="link-btn" href="#produtos">Voltar para produtos</a>
         <h1 style="margin-top:10px">Adicionar produto</h1>
         <p>Os mesmos dados da planilha de estoque: local, prateleira, descrição, peças e fabricante. O ID é criado automaticamente.</p></div></div>
+      ${state.linkDoQR ? `<div class="notice notice-info form-panel" role="status">${ICON.qr}<span>Link preenchido pelo QR code. Complete o local, a prateleira, a descrição, as peças e o fabricante.</span></div>` : ''}
       ${formProduto(null)}`);
+    if (state.linkDoQR) {
+      $('#p-link').value = state.linkDoQR; state.linkDoQR = null;
+      $('#p-local').focus();
+    }
+    ligarBotaoQR(null);
     $('#f-prod').addEventListener('submit', async (e) => {
       e.preventDefault();
       const d = lerFormProduto(null);
@@ -801,6 +878,7 @@
         <button class="btn btn-danger-ghost" type="button" id="b-excluir-prod">Excluir produto</button>
       </section>` : ''}`);
     const bx = $('#b-excluir-prod'); if (bx) bx.addEventListener('click', () => excluirProduto(p));
+    ligarBotaoQR(p);
     $('#f-prod').addEventListener('submit', (e) => {
       e.preventDefault();
       const d = lerFormProduto(p.id);

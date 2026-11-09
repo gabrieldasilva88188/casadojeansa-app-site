@@ -500,3 +500,35 @@ table.semanas th.sel, table.semanas td.sel { background: var(--line-soft); }
   #fv-periodo .seg-n { display: block; }
   #fv-periodo .seg-n::before, #fv-periodo .seg-n::after { content: ""; }
 }
+
+/* ---------- Leitor de QR code ---------- */
+.head-acoes { display: flex; flex-wrap: wrap; gap: 10px; }
+.input-com-botao { display: flex; gap: 8px; }
+.input-com-botao .input { flex: 1; min-width: 0; }
+.input-com-botao .btn { flex: none; white-space: nowrap; }
+.input.flash { box-shadow: 0 0 0 3px var(--ok); transition: box-shadow .3s; }
+.leitor-qr .modal { width: min(460px, 100%); }
+.qr-visor {
+  position: relative; margin-top: 14px; aspect-ratio: 1 / 1; width: 100%;
+  border-radius: var(--radius); overflow: hidden; background: #0B1018;
+}
+.qr-visor video { width: 100%; height: 100%; object-fit: cover; display: block; }
+.qr-mira { position: absolute; inset: 0; display: grid; place-items: center; pointer-events: none; }
+.qr-mira span {
+  width: 64%; aspect-ratio: 1 / 1; border-radius: 14px;
+  box-shadow: 0 0 0 9999px rgba(11, 16, 24, .45);
+  outline: 3px solid rgba(255, 255, 255, .92); outline-offset: -3px;
+}
+.qr-sem-camera { position: absolute; inset: 0; display: grid; place-items: center; color: #8796A8; }
+.qr-sem-camera svg { width: 56px; height: 56px; }
+.qr-status { margin-top: 12px; font-size: .9rem; color: var(--muted); min-height: 2.6em; }
+.qr-status.qr-erro { color: var(--danger); }
+.leitor-qr .actions .btn svg { width: 18px; height: 18px; }
+@media (max-width: 560px) {
+  .head-acoes { width: 100%; }
+  .head-acoes .btn { flex: 1; justify-content: center; white-space: nowrap; padding-inline: 10px; font-size: .92rem; gap: 6px; }
+  .input-com-botao .btn span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .input-com-botao .btn { padding-inline: 12px; }
+  .leitor-qr .actions { flex-direction: column; }
+  .leitor-qr .actions .btn { width: 100%; justify-content: center; }
+}
