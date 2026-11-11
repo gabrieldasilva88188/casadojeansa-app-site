@@ -7,8 +7,6 @@ Sistema de estoque, vídeos do TikTok e vendas da loja.
 
 ## Acesso
 
-- **Admins master fixos:** Ricardo Ronery (`ricardo@gerenciador.app`) e Márcio House (`marcio@gerenciador.app`).
-  Entram com a senha provisória `estoque123` e o sistema obriga a criar uma senha própria no primeiro acesso.
 - **Novos colaboradores:** clicam em "Pedir acesso", criam a conta e ficam aguardando. Um admin master aprova
   (ou recusa) na área Admin; quem é aprovado entra como colaborador.
 - Qualquer pessoa pode trocar a própria senha pelo menu ("Alterar senha").
