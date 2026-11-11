@@ -279,6 +279,58 @@ select teste.confere((select count(*) = 0 from public.vendas), 'colaborador não
 reset role;
 
 -- =====================================================================
+-- Contas do TikTok (admin master adiciona, renomeia, exclui e restaura)
+-- =====================================================================
+select set_config('request.jwt.claim.sub', teste.id_de('ketlin@exemplo.com'), false);
+set role authenticated;
+select teste.barrado($$ insert into public.contas_tiktok (nome, ordem) values ('LOJA NOVA', 9) $$,
+  'colaborador não adiciona conta do TikTok');
+select teste.barrado($$ update public.contas_tiktok set nome = 'X' where nome = 'SHAMA' $$,
+  'colaborador não renomeia conta do TikTok');
+reset role;
+
+select set_config('request.jwt.claim.sub', teste.id_de('ricardo@exemplo.com'), false);
+set role authenticated;
+insert into public.contas_tiktok (nome, ordem) values ('  loja   nova ', 6);
+select teste.confere((select count(*) = 1 from public.contas_tiktok where nome = 'LOJA NOVA'),
+  'admin adiciona conta; nome fica em maiúsculas e sem espaços sobrando');
+select teste.confere((select count(*) = 1 from public.registros where acao = 'Adicionou conta TikTok' and detalhe = 'LOJA NOVA'
+                        and usuario_id = teste.id_de('ricardo@exemplo.com')::uuid),
+  'conta nova entra no histórico');
+select teste.barrado($$ insert into public.contas_tiktok (nome) values ('Loja Nova') $$,
+  'não repete o nome de outra conta');
+select teste.barrado($$ insert into public.contas_tiktok (nome) values ('   ') $$,
+  'não aceita conta sem nome');
+update public.contas_tiktok set nome = 'LOJA CENTRO' where nome = 'LOJA NOVA';
+select teste.confere((select count(*) = 1 from public.registros where acao = 'Renomeou conta TikTok'
+                        and detalhe = 'LOJA NOVA → LOJA CENTRO'),
+  'renomear conta fica no histórico (de → para)');
+insert into public.videos (produto_id, conta_id, usuario_id)
+values (2, (select id from public.contas_tiktok where nome = 'LOJA CENTRO'), teste.id_de('ricardo@exemplo.com')::uuid);
+update public.contas_tiktok set ativa = false where nome = 'LOJA CENTRO';
+select teste.confere((select count(*) = 1 from public.registros where acao = 'Excluiu conta TikTok' and detalhe = 'LOJA CENTRO'),
+  'excluir conta fica no histórico');
+select teste.confere((select count(*) = 1 from public.videos v join public.contas_tiktok c on c.id = v.conta_id
+                      where c.nome = 'LOJA CENTRO'),
+  'vídeos da conta excluída continuam no histórico');
+select teste.barrado($$ insert into public.videos (produto_id, conta_id, usuario_id)
+  values (2, (select id from public.contas_tiktok where nome = 'LOJA CENTRO'), teste.id_de('ricardo@exemplo.com')::uuid) $$,
+  'não registra vídeo em conta excluída');
+select teste.barrado($$ insert into public.vendas (produto_id, conta_id, quantidade, vendido_em)
+  values (2, (select id from public.contas_tiktok where nome = 'LOJA CENTRO'), 1, current_date) $$,
+  'não lança venda em conta excluída');
+update public.contas_tiktok set ativa = true where nome = 'LOJA CENTRO';
+select teste.confere((select ativa from public.contas_tiktok where nome = 'LOJA CENTRO') and
+                     (select count(*) = 1 from public.registros where acao = 'Restaurou conta TikTok'),
+  'admin restaura conta excluída');
+delete from public.videos where conta_id = (select id from public.contas_tiktok where nome = 'LOJA CENTRO');
+update public.contas_tiktok set ativa = false where nome <> 'OFICIAL';
+select teste.barrado($$ update public.contas_tiktok set ativa = false where nome = 'OFICIAL' $$,
+  'não deixa ficar sem nenhuma conta ativa');
+update public.contas_tiktok set ativa = true where nome <> 'LOJA CENTRO';
+reset role;
+
+-- =====================================================================
 -- Views de análise
 -- =====================================================================
 select set_config('request.jwt.claim.sub', teste.id_de('ricardo@exemplo.com'), false);

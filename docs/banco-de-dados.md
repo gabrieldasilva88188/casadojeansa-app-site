@@ -92,7 +92,7 @@ erDiagram
 | Tabela | Para que serve | Tela do sistema |
 |---|---|---|
 | `perfis` | Uma linha por pessoa da equipe, ligada ao login do Supabase | Login, Admin → Equipe |
-| `contas_tiktok` | As contas onde os vídeos são postados | Filtro de conta, Registrar vídeo |
+| `contas_tiktok` | As contas onde os vídeos são postados (`ativa = false` quando excluída) | Admin → Contas do TikTok, filtro de conta, Registrar vídeo, Adicionar venda |
 | `fabricantes` | Lista única de fabricantes, para não repetir o mesmo com outro nome | Adicionar/editar produto, filtro |
 | `produtos` | O estoque, com as colunas da planilha | Produtos, Adicionar, Editar |
 | `videos` | Cada vídeo postado: qual produto, qual conta, quem e quando | Vídeos, Análise, Admin |
@@ -135,6 +135,11 @@ Essas regras valem mesmo que alguém tente burlar o site, porque ficam no própr
 | Nº de prateleira no padrão da planilha (A1, M12) | Validação no banco |
 | Toda alteração vai para o histórico, com antes e depois | Gatilho `registrar_alteracao` |
 | "Excluir conta" não apaga a pessoa | O histórico dela continua; `excluido_em` guarda a data |
+| Contas do TikTok: só admin master adiciona, renomeia, exclui e restaura | RLS + `eh_admin()` |
+| Nome da conta do TikTok em maiúsculas, sem espaços sobrando e sem repetir | Gatilho `proteger_conta_tiktok` + `nome` único |
+| Excluir conta do TikTok não apaga: ela some das escolhas e vídeos/vendas antigos continuam | Campo `ativa` |
+| Vídeo ou venda novos só em conta do TikTok ativa; sempre sobra pelo menos uma ativa | Gatilhos `bloquear_conta_inativa` e `proteger_conta_tiktok` |
+| Adicionar, renomear, excluir e restaurar conta do TikTok vão para o histórico | Gatilho `registrar_conta_tiktok` |
 
 ## Projeto no Supabase
 

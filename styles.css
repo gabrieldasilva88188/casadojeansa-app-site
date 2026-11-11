@@ -532,3 +532,24 @@ table.semanas th.sel, table.semanas td.sel { background: var(--line-soft); }
   .leitor-qr .actions { flex-direction: column; }
   .leitor-qr .actions .btn { width: 100%; justify-content: center; }
 }
+
+/* ---------- Contas do TikTok (Admin) ---------- */
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.input-maiusculo { text-transform: uppercase; }
+.input-maiusculo::placeholder { text-transform: none; }
+.tabela-contas .c-ordem { width: 1%; padding-right: 0; }
+.ordem-btns { display: flex; gap: 4px; }
+.btn-icone { width: 32px; height: 32px; padding: 0; justify-content: center; }
+.btn-icone svg { width: 16px; height: 16px; }
+.btn-icone:disabled { opacity: .35; cursor: default; }
+.conta-nome { letter-spacing: .02em; }
+.contas-excluidas { margin-top: 14px; }
+.contas-excluidas summary { cursor: pointer; font-size: .9rem; color: var(--muted); padding: 6px 0; width: fit-content; }
+.contas-excluidas ul { list-style: none; margin: 8px 0 0; padding: 0; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.contas-excluidas li { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; flex-wrap: wrap; }
+.contas-excluidas li + li { border-top: 1px solid var(--line-soft); }
+.contas-excluidas .muted { font-size: .85rem; }
+@media (max-width: 720px) {
+  .tabela-contas .c-ordem { width: auto; order: 1; }
+  .tabela-contas .c-acoes { order: 2; }
+}

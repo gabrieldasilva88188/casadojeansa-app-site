@@ -33,6 +33,7 @@
     state.contaId = {}; state.contaNome = {};
     contas.forEach((c) => { state.contaId[c.nome] = c.id; state.contaNome[c.id] = c.nome; });
     state.contas = contas.filter((c) => c.ativa).map((c) => c.nome);
+    state.contasTodas = contas;   // inclui as excluídas (ativa = false), para a tela de Admin
     state.fabricantes = fabs;
     const nomeFab = Object.fromEntries(fabs.map((f) => [f.id, f.nome]));
     // produtosTodos inclui os excluídos (para vídeos, vendas e histórico); produtos = só os da lista
@@ -170,6 +171,8 @@
     busca: ic('<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>'),
     link: ic('<path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/>'),
     alerta: ic('<path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 2 18a2 2 0 0 0 1.7 3h16.6a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/>'),
+    cima: ic('<path d="m6 15 6-6 6 6"/>'),
+    baixo: ic('<path d="m6 9 6 6 6-6"/>'),
     qr: ic('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM20 14v.01M14 20h.01M17 20h4v-3"/>'),
     copiar: ic('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V5a2 2 0 0 1 2-2h10"/>'),
     certo: ic('<path d="m5 12 5 5 9-10"/>'),
@@ -1486,9 +1489,10 @@
       return;
     }
     const acoes = ['Adicionou produto', 'Editou produto', 'Excluiu produto', 'Restaurou produto', 'Registrou vídeo', 'Adicionou venda', 'Editou venda', 'Excluiu venda',
-      'Criou conta', 'Aprovou cadastro', 'Recusou cadastro', 'Alterou cargo', 'Excluiu conta', 'Reativou conta', 'Importou planilha'];
+      'Criou conta', 'Aprovou cadastro', 'Recusou cadastro', 'Alterou cargo', 'Excluiu conta', 'Reativou conta',
+      'Adicionou conta TikTok', 'Renomeou conta TikTok', 'Excluiu conta TikTok', 'Restaurou conta TikTok', 'Importou planilha'];
     shell('admin', `
-      <div class="page-head"><div><h1>Admin master</h1><p>Cadastros novos, vídeos de cada pessoa, a equipe e tudo o que foi alterado no sistema.</p></div></div>
+      <div class="page-head"><div><h1>Admin master</h1><p>Cadastros novos, vídeos de cada pessoa, a equipe, as contas do TikTok e tudo o que foi alterado no sistema.</p></div></div>
       <section id="pendentes"></section>
       <section class="panel">
         <div class="panel-head"><h2>Vídeos por pessoa</h2>
@@ -1503,6 +1507,11 @@
       <section>
         <div class="panel-head"><div><h2>Equipe</h2><p>Mude o cargo para dar ou tirar o acesso à área Admin. Contas excluídas não conseguem mais entrar.</p></div></div>
         <div id="equipe"></div>
+      </section>
+      <section id="contas-tiktok">
+        <div class="panel-head"><div><h2>Contas do TikTok</h2><p>As contas que aparecem para escolher ao registrar vídeos e vendas.</p></div>
+          <button class="btn btn-sm" type="button" id="b-nova-conta">${ICON.mais}Adicionar conta</button></div>
+        <div id="lista-contas"></div>
       </section>
       <section>
         <div class="panel-head"><h2>Registros da equipe</h2>
@@ -1590,7 +1599,121 @@
       return ok;
     };
 
-    desenharPendentes(); desenharGrafico(); desenharEquipe(); desenharRegistros();
+    // ---------- Contas do TikTok ----------
+    const desenharContas = () => {
+      const ativas = state.contasTodas.filter((c) => c.ativa);
+      const excluidas = state.contasTodas.filter((c) => !c.ativa);
+      const uso = (c) => ({
+        v30: state.videos.filter((v) => v.conta === c.nome && dentroDe(v.data, 30)).length,
+        vt: state.videos.filter((v) => v.conta === c.nome).length,
+        vendas: state.vendas.filter((v) => v.conta === c.nome).reduce((t, v) => t + v.quantidade, 0)
+      });
+      $('#lista-contas').innerHTML = `
+        <div class="table-wrap"><table class="cards tabela-contas">
+          <thead><tr><th class="c-ordem"><span class="sr-only">Ordem</span></th><th>Conta</th><th class="r">Vídeos em 30 dias</th><th class="r">Vídeos no total</th><th class="r">Peças vendidas</th><th class="r hide-sm">Ações</th></tr></thead>
+          <tbody>${ativas.map((c, i) => { const u = uso(c); return `<tr>
+            <td class="c-ordem" data-label="Ordem na lista"><div class="ordem-btns">
+              <button class="btn btn-ghost btn-icone" type="button" data-subir="${c.id}" ${i === 0 ? 'disabled' : ''} aria-label="Subir ${esc(c.nome)} na lista">${ICON.cima}</button>
+              <button class="btn btn-ghost btn-icone" type="button" data-descer="${c.id}" ${i === ativas.length - 1 ? 'disabled' : ''} aria-label="Descer ${esc(c.nome)} na lista">${ICON.baixo}</button></div></td>
+            <td class="prod c-titulo"><b class="conta-nome">${esc(c.nome)}</b></td>
+            <td class="r num" data-label="Vídeos em 30 dias">${u.v30}</td>
+            <td class="r num" data-label="Vídeos no total">${u.vt}</td>
+            <td class="r num" data-label="Peças vendidas">${u.vendas}</td>
+            <td class="c-acoes"><div class="row-actions">
+              <button class="btn btn-ghost btn-sm" type="button" data-editar-conta="${c.id}">Editar</button>
+              <button class="btn btn-danger-ghost btn-sm" type="button" data-excluir-conta="${c.id}" ${ativas.length === 1 ? 'disabled title="Mantenha pelo menos uma conta ativa"' : ''}>Excluir</button>
+            </div></td></tr>`; }).join('')}</tbody></table></div>
+        ${excluidas.length ? `<details class="contas-excluidas">
+          <summary>Contas excluídas (${excluidas.length})</summary>
+          <ul>${excluidas.map((c) => { const u = uso(c); return `<li>
+            <span><b>${esc(c.nome)}</b> <span class="muted">${plural(u.vt, 'vídeo', 'vídeos')} e ${plural(u.vendas, 'peça vendida', 'peças vendidas')} no histórico</span></span>
+            <button class="btn btn-ghost btn-sm" type="button" data-restaurar-conta="${c.id}">Restaurar</button></li>`; }).join('')}</ul>
+        </details>` : ''}`;
+    };
+    const conta = (id) => state.contasTodas.find((c) => String(c.id) === String(id));
+    const normalizarNome = (t) => String(t || '').trim().replace(/\s+/g, ' ').toUpperCase();
+    const salvarConta = async (btn, fn, msg) => {
+      const ok = await executar(btn, async () => { await fn(); await carregarDados(); }, msg);
+      if (ok) { fecharModal(); render(); }
+      return ok;
+    };
+    // Adicionar / editar: o mesmo formulário
+    const formConta = (c) => {
+      abrirModal({
+        titulo: c ? `Editar a conta ${esc(c.nome)}` : 'Adicionar conta do TikTok',
+        corpo: `<div class="field" style="margin-top:12px"><label for="ct-nome">Nome da conta</label>
+            <input class="input input-maiusculo" id="ct-nome" maxlength="30" autocomplete="off" value="${c ? esc(c.nome) : ''}" placeholder="Ex.: LOJA CENTRO">
+            <span class="hint">Aparece assim nos botões de escolher a conta. Fica em letras maiúsculas.</span>
+            <span class="err" id="ct-err" role="alert"></span></div>
+          ${c ? `<p class="muted" style="font-size:.85rem;margin-top:10px">Os vídeos e as vendas já lançados nessa conta passam a aparecer com o nome novo.</p>` : ''}`,
+        botoes: [
+          { label: c ? 'Salvar' : 'Adicionar conta', acao: (ev) => enviar(ev.currentTarget) },
+          { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
+        ]
+      });
+      const inp = $('#ct-nome'), err = $('#ct-err');
+      inp.focus(); inp.select();
+      inp.addEventListener('input', () => { err.textContent = ''; inp.removeAttribute('aria-invalid'); });
+      inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); enviar($('.modal [data-b="0"]')); } });
+      const erro = (t) => { err.textContent = t; inp.setAttribute('aria-invalid', 'true'); inp.focus(); };
+      async function enviar(btn) {
+        const nome = normalizarNome(inp.value);
+        if (!nome) return erro('Digite o nome da conta.');
+        if (c && nome === c.nome) { fecharModal(); return; }
+        const igual = state.contasTodas.find((x) => x.nome === nome && (!c || x.id !== c.id));
+        if (igual && igual.ativa) return erro(`Já existe a conta ${nome}.`);
+        if (igual && !igual.ativa) {
+          err.innerHTML = `A conta ${esc(nome)} foi excluída antes. <button class="btn-text" type="button" id="ct-restaurar">Restaurar ${esc(nome)}</button>`;
+          inp.setAttribute('aria-invalid', 'true');
+          $('#ct-restaurar').addEventListener('click', (ev) =>
+            salvarConta(ev.currentTarget, () => db.alterar('contas_tiktok', `id=eq.${igual.id}`, { ativa: true }), `Conta ${nome} restaurada`));
+          return;
+        }
+        if (c) await salvarConta(btn, () => db.alterar('contas_tiktok', `id=eq.${c.id}`, { nome }), `Conta renomeada para ${nome}`);
+        else {
+          const ordem = Math.max(0, ...state.contasTodas.map((x) => x.ordem || 0)) + 1;
+          await salvarConta(btn, () => db.inserir('contas_tiktok', { nome, ordem }), `Conta ${nome} adicionada`);
+        }
+      }
+    };
+    $('#b-nova-conta').addEventListener('click', () => formConta(null));
+    $('#contas-tiktok').addEventListener('click', async (e) => {
+      const ed = e.target.closest('[data-editar-conta]'), ex = e.target.closest('[data-excluir-conta]');
+      const re = e.target.closest('[data-restaurar-conta]');
+      const su = e.target.closest('[data-subir]'), de = e.target.closest('[data-descer]');
+      if (ed) formConta(conta(ed.dataset.editarConta));
+      if (ex) {
+        const c = conta(ex.dataset.excluirConta);
+        const vt = state.videos.filter((v) => v.conta === c.nome).length;
+        const ve = state.vendas.filter((v) => v.conta === c.nome).length;
+        abrirModal({
+          titulo: `Excluir a conta ${esc(c.nome)}?`, alerta: true,
+          corpo: `<p class="muted">Ela deixa de aparecer para escolher ao registrar vídeos e vendas.
+            ${vt || ve ? `${[vt ? plural(vt, 'vídeo', 'vídeos') : '', ve ? plural(ve, 'venda', 'vendas') : ''].filter(Boolean).join(' e ')} já ${vt + ve === 1 ? 'lançado continua' : 'lançados continuam'} no histórico e nos gráficos.` : ''}
+            Dá para restaurar depois em "Contas excluídas".</p>`,
+          botoes: [
+            { label: 'Excluir conta', cls: 'btn-red', acao: (ev) => salvarConta(ev.currentTarget, () => db.alterar('contas_tiktok', `id=eq.${c.id}`, { ativa: false }), `Conta ${c.nome} excluída`) },
+            { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
+          ]
+        });
+      }
+      if (re) { const c = conta(re.dataset.restaurarConta); salvarConta(re, () => db.alterar('contas_tiktok', `id=eq.${c.id}`, { ativa: true }), `Conta ${c.nome} restaurada`); }
+      if (su || de) {
+        const ativas = state.contasTodas.filter((c) => c.ativa);
+        const i = ativas.findIndex((c) => String(c.id) === (su ? su.dataset.subir : de.dataset.descer));
+        const j = su ? i - 1 : i + 1;
+        if (i < 0 || j < 0 || j >= ativas.length) return;
+        const nova = ativas.slice(); [nova[i], nova[j]] = [nova[j], nova[i]];
+        // renumera 1, 2, 3... (só grava as que mudaram)
+        const ok = await executar(null, async () => {
+          for (let k = 0; k < nova.length; k++) if (nova[k].ordem !== k + 1) await db.alterar('contas_tiktok', `id=eq.${nova[k].id}`, { ordem: k + 1 });
+          await carregarDados();
+        });
+        if (ok) { desenharContas(); const b = $(`[data-${su ? 'subir' : 'descer'}="${nova[j].id}"]`); if (b && !b.disabled) b.focus(); }
+      }
+    });
+
+    desenharPendentes(); desenharGrafico(); desenharEquipe(); desenharContas(); desenharRegistros();
     $$('[data-per]').forEach((b) => b.addEventListener('click', () => { periodoAdmin = +b.dataset.per; desenharGrafico(); }));
     $('#ad-conta').addEventListener('change', (e) => { contaSel = e.target.value; desenharGrafico(); });
     $('#r-user').addEventListener('change', (e) => { filtroUsuario = e.target.value; limiteReg = 15; desenharRegistros(); });
