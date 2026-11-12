@@ -553,3 +553,22 @@ table.semanas th.sel, table.semanas td.sel { background: var(--line-soft); }
   .tabela-contas .c-ordem { width: auto; order: 1; }
   .tabela-contas .c-acoes { order: 2; }
 }
+
+/* ---------- Mais vendidos por conta (Admin) ---------- */
+.top-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 340px), 1fr)); gap: 16px; }
+.top-conta { display: flex; flex-direction: column; gap: 12px; }
+.top-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; }
+.top-head h3 { font-size: 1rem; margin: 0; }
+.top-head .muted { font-size: .85rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.top-conta .bars { gap: 12px; }
+/* nome do produto em cima da barra, para caber a descrição inteira */
+.top-conta .bar-row { grid-template-columns: minmax(0, 1fr) 2.5em; row-gap: 4px; column-gap: 10px; }
+.top-conta .bar-label { grid-column: 1 / -1; }
+.top-conta .bar-track { height: 16px; }
+.top-conta .axis { grid-template-columns: 0 minmax(0, 1fr) 2.5em; gap: 0 10px; }
+.top-pos { display: inline-grid; place-items: center; width: 1.45em; height: 1.45em; margin-right: 8px; border-radius: 50%;
+  background: var(--line-soft); font-size: .75rem; font-weight: 700; font-variant-numeric: tabular-nums; vertical-align: 1px; }
+.top-mais, .top-vazio { font-size: .85rem; margin: 0; }
+.tag-excluida { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
+  border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; }
+.top-conta .bar-track { background-image: none; background-color: var(--line-soft); border-radius: 3px; }

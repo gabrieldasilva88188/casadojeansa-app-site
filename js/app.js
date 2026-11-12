@@ -1097,8 +1097,8 @@
   }
   function grafico(linhas, opts) {
     const o = opts || {};
-    const maior = Math.max(...linhas.map((l) => l.segs.reduce((a, s) => a + s.v, 0)));
-    const e = escala(maior);
+    const maior = o.max != null ? o.max : Math.max(...linhas.map((l) => l.segs.reduce((a, s) => a + s.v, 0)));
+    const e = o.max != null ? { max: Math.max(o.max, 1), ticks: [] } : escala(maior);   // max fixo: mesma escala em vários gráficos
     const cls = o.largo ? 'bars-largo' : '';
     return `<div class="bars ${cls}">${linhas.map((l) => {
       const total = l.segs.reduce((a, s) => a + s.v, 0);
@@ -1108,8 +1108,8 @@
         <div class="bar-track" title="${esc(titulo)}" role="img" aria-label="${esc((l.titulo || '') + ': ' + titulo)}">${l.segs.filter((s) => s.v > 0).map((s) =>
           `<span class="bar-seg ${s.cls}" style="width:${(s.v / e.max) * 100}%"></span>`).join('')}</div>
         <span class="bar-val">${l.valor != null ? l.valor : fmtN(total)}</span></div>`;
-    }).join('')}</div>
-    <div class="axis ${cls}" aria-hidden="true"><span></span><div class="ticks">${e.ticks.map((t) => `<span>${fmtN(t)}</span>`).join('')}</div><span></span></div>`;
+    }).join('')}</div>${o.semEixo ? '' : `
+    <div class="axis ${cls}" aria-hidden="true"><span></span><div class="ticks">${e.ticks.map((t) => `<span>${fmtN(t)}</span>`).join('')}</div><span></span></div>`}`;
   }
 
   // Semanas do mês, como nas colunas da planilha
@@ -1482,6 +1482,9 @@
 
   // ---------- Admin master ----------
   let periodoAdmin = 30, filtroUsuario = '', filtroAcao = '', limiteReg = 15;
+  let periodoTop = '30';   // Mais vendidos por conta: 'mes', '30', '90' ou 'tudo'
+  const PERIODOS_TOP = [['mes', 'Este mês'], ['30', '30 dias'], ['90', '90 dias'], ['tudo', 'Tudo']];
+  const TOP_N = 5;
   PAGINAS.admin = function () {
     if (eu().papel !== 'admin') {
       shell('admin', `<div class="page-head"><div><h1>Admin master</h1></div></div>
@@ -1503,6 +1506,13 @@
             ${seletorConta('ad-conta')}
           </div></div>
         <div id="graf-usuarios"></div>
+      </section>
+      <section id="top-contas">
+        <div class="panel-head"><div><h2>Mais vendidos por conta</h2><p id="top-sub">Os ${TOP_N} produtos com mais peças vendidas em cada conta do TikTok.</p></div>
+          <div class="seg-toggle" role="group" aria-label="Período dos mais vendidos">
+            ${PERIODOS_TOP.map(([k, t]) => `<button type="button" data-top="${k}">${t}</button>`).join('')}
+          </div></div>
+        <div id="graf-top"></div>
       </section>
       <section>
         <div class="panel-head"><div><h2>Equipe</h2><p>Mude o cargo para dar ou tirar o acesso à área Admin. Contas excluídas não conseguem mais entrar.</p></div></div>
@@ -1713,7 +1723,50 @@
       }
     });
 
-    desenharPendentes(); desenharGrafico(); desenharEquipe(); desenharContas(); desenharRegistros();
+    // ---------- Mais vendidos por conta (um quadro por conta) ----------
+    const desenharTop = () => {
+      const hoje = ymdLocal(agora());
+      let desde = '';
+      if (periodoTop === 'mes') desde = hoje.slice(0, 8) + '01';
+      else if (periodoTop !== 'tudo') { const d = agora(); d.setDate(d.getDate() - (Number(periodoTop) - 1)); desde = ymdLocal(d); }
+      const vendas = state.vendas.filter((v) => !desde || v.data >= desde);
+      $$('[data-top]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.top === periodoTop)));
+      const txtPer = { mes: 'neste mês', 30: 'nos últimos 30 dias', 90: 'nos últimos 90 dias', tudo: 'desde o começo' }[periodoTop];
+      // contas ativas na ordem da lista + excluídas que venderam no período
+      const contas = [...state.contasTodas.filter((c) => c.ativa),
+        ...state.contasTodas.filter((c) => !c.ativa && vendas.some((v) => v.conta === c.nome))];
+      const total = vendas.reduce((a, v) => a + v.quantidade, 0);
+      $('#top-sub').textContent = `Os ${TOP_N} produtos com mais peças vendidas em cada conta do TikTok, ${txtPer}. ${total ? plural(total, 'peça vendida', 'peças vendidas') + ' no total.' : ''}`;
+      if (!vendas.length) {
+        $('#graf-top').innerHTML = `<div class="panel"><p class="muted">Nenhuma venda lançada ${txtPer}. As vendas são lançadas na tela <a href="#vendas">Vendas</a>.</p></div>`;
+        return;
+      }
+      const listas = contas.map((c) => {
+        const porProd = new Map();
+        vendas.filter((v) => v.conta === c.nome).forEach((v) => porProd.set(v.produtoId, (porProd.get(v.produtoId) || 0) + v.quantidade));
+        return [...porProd].map(([id, n]) => ({ p: produto(id) || { prateleira: '?', descricao: 'Produto removido', num: 0 }, n }))
+          .sort((a, b) => b.n - a.n || ordemPrat(a.p, b.p));
+      });
+      // mesma escala em todas as contas, para as barras serem comparáveis entre elas
+      const maxGeral = Math.max(1, ...listas.map((l) => (l[0] ? l[0].n : 0)));
+      $('#graf-top').innerHTML = `<div class="top-grid">${contas.map((c, ci) => {
+        const lista = listas[ci];
+        const soma = lista.reduce((a, d) => a + d.n, 0);
+        const top = lista.slice(0, TOP_N);
+        return `<section class="panel top-conta" aria-label="Mais vendidos da conta ${esc(c.nome)}">
+          <div class="top-head"><h3><span class="conta">${esc(c.nome)}</span>${c.ativa ? '' : ' <span class="tag-excluida">excluída</span>'}</h3>
+            <span class="muted">${soma ? plural(soma, 'peça', 'peças') : 'sem vendas'}</span></div>
+          ${top.length ? grafico(top.map((d, i) => ({
+              label: `<span class="top-pos">${i + 1}</span><b>${esc(d.p.prateleira)}</b> ${esc(descricao(d.p))}`, titulo: rotulo(d.p),
+              valor: fmtN(d.n), segs: [{ v: d.n, cls: 'c-tiktok', nome: 'Peças vendidas' }] })), { max: maxGeral, semEixo: true })
+            + (lista.length > TOP_N ? `<p class="top-mais muted">Mais ${plural(lista.length - TOP_N, 'produto vendido', 'produtos vendidos')} nessa conta.</p>` : '')
+            : `<p class="muted top-vazio">Nenhuma venda ${txtPer}.</p>`}
+        </section>`;
+      }).join('')}</div>`;
+    };
+    $$('[data-top]').forEach((b) => b.addEventListener('click', () => { periodoTop = b.dataset.top; desenharTop(); }));
+
+    desenharPendentes(); desenharGrafico(); desenharTop(); desenharEquipe(); desenharContas(); desenharRegistros();
     $$('[data-per]').forEach((b) => b.addEventListener('click', () => { periodoAdmin = +b.dataset.per; desenharGrafico(); }));
     $('#ad-conta').addEventListener('change', (e) => { contaSel = e.target.value; desenharGrafico(); });
     $('#r-user').addEventListener('change', (e) => { filtroUsuario = e.target.value; limiteReg = 15; desenharRegistros(); });
