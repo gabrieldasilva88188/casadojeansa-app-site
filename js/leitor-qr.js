@@ -3,7 +3,7 @@
    nos outros (iPhone/Safari, Firefox) carrega o jsQR (js/vendor/jsQR.js) só na hora de usar. */
 window.LeitorQR = (function () {
   'use strict';
-  const VERSAO = '20261112a';
+  const VERSAO = '20261112b';
 
   // ---------- Decodificador ----------
   let detectorNativo; // undefined = ainda não testado; null = não tem

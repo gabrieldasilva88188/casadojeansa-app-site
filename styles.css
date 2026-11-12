@@ -572,3 +572,10 @@ table.semanas th.sel, table.semanas td.sel { background: var(--line-soft); }
 .tag-excluida { font-size: .72rem; font-weight: 600; text-transform: uppercase; letter-spacing: .04em; color: var(--muted);
   border: 1px solid var(--line); border-radius: 999px; padding: 1px 8px; margin-left: 6px; vertical-align: 2px; }
 .top-conta .bar-track { background-image: none; background-color: var(--line-soft); border-radius: 3px; }
+
+/* ---------- Nova senha (Admin) ---------- */
+.senha-prov { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; letter-spacing: .03em; }
+.senha-mostrar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap;
+  padding: 12px 14px; border: 1px dashed var(--line); border-radius: var(--radius-sm); background: var(--bg); }
+.senha-mostrar code { font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace; font-size: 1.25rem; font-weight: 700;
+  letter-spacing: .04em; overflow-wrap: anywhere; user-select: all; }

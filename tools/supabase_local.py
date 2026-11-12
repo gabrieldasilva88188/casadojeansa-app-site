@@ -3,7 +3,7 @@
 Sobe um PostgreSQL temporário com o mesmo esquema, regras (RLS), gatilhos e carga
 inicial do projeto, e responde nas mesmas rotas que o site usa:
   POST /auth/v1/token?grant_type=password|refresh_token, POST /auth/v1/signup,
-  GET e PUT /auth/v1/user, POST /auth/v1/logout
+  GET e PUT /auth/v1/user, POST /auth/v1/logout, POST /auth/v1/recover, POST /rest/v1/rpc/<função>
   GET/POST/PATCH/DELETE /rest/v1/<tabela>?select=...&coluna=eq.valor&order=...&limit=&offset=
 
 Uso: python3 tools/supabase_local.py [porta]   (padrão 54321; precisa rodar como usuário comum)
@@ -31,6 +31,7 @@ BIN = os.path.dirname(subprocess.run(["bash", "-lc", "command -v pg_ctl || ls /u
                                      capture_output=True, text=True).stdout.strip())
 TABELAS = {"perfis", "contas_tiktok", "fabricantes", "produtos", "videos", "vendas", "registros"}
 TOKENS, REFRESH = {}, {}
+RECUPERACOES = []  # pedidos de "Esqueci minha senha" (no Supabase de verdade, viraria um e-mail)
 
 
 def psql(sql, arquivo=None):
@@ -87,12 +88,18 @@ def subir_banco():
     for m in sorted(glob.glob(os.path.join(RAIZ, "supabase/migrations/*.sql"))):
         psql(None, m)
     psql(None, "supabase/seed.sql")
-    psql("create schema teste; create table teste.senhas (id uuid primary key, senha text not null);")
     for email, nome in [("ricardo@gerenciador.app", "Ricardo Ronery"), ("marcio@gerenciador.app", "Márcio House")]:
         uid = str(uuid.uuid4())
-        psql(f"insert into auth.users (id, email, raw_user_meta_data) values ({lit(uid)}, {lit(email)}, "
-             f"{lit(json.dumps({'nome': nome}))}); insert into teste.senhas values ({lit(uid)}, 'estoque123');")
+        psql(f"insert into auth.users (id, email, raw_user_meta_data, encrypted_password) values ({lit(uid)}, {lit(email)}, "
+             f"{lit(json.dumps({'nome': nome}))}, {HASH('estoque123')}); "
+             f"insert into auth.identities (user_id, provider, provider_id, identity_data) values ({lit(uid)}, 'email', {lit(uid)}, "
+             f"{lit(json.dumps({'sub': uid, 'email': email}))});")
     psql("update public.perfis set papel = 'admin', fixo = true, aprovado = true, senha_provisoria = true;")
+
+
+# Senhas guardadas como no Supabase: bcrypt em auth.users.encrypted_password
+def HASH(senha):
+    return f"extensions.crypt({lit(senha)}, extensions.gen_salt('bf'))"
 
 
 def sessao(uid, email):
@@ -164,8 +171,8 @@ class Handler(BaseHTTPRequestHandler):
         b = self.corpo() if metodo in ("POST", "PUT") else None
         if rota == "token" and q.get("grant_type") == "password":
             r = json.loads(psql(f"select coalesce(jsonb_agg(x), '[]'::jsonb) from (select u.id, u.email from auth.users u "
-                                f"join teste.senhas s on s.id = u.id where u.email = {lit(b['email'].lower())} "
-                                f"and s.senha = {lit(b['password'])}) x"))
+                                f"where u.email = {lit(b['email'].lower())} "
+                                f"and u.encrypted_password = extensions.crypt({lit(b['password'])}, u.encrypted_password)) x"))
             if not r:
                 return self.responder(400, {"code": 400, "error_code": "invalid_credentials", "msg": "Invalid login credentials"})
             return self.responder(200, sessao(r[0]["id"], r[0]["email"]))
@@ -186,23 +193,35 @@ class Handler(BaseHTTPRequestHandler):
             if len(b.get("password", "")) < 6:
                 return self.responder(422, {"code": 422, "error_code": "weak_password", "msg": "Password should be at least 6 characters"})
             uid = str(uuid.uuid4())
-            psql(f"insert into auth.users (id, email, raw_user_meta_data) values ({lit(uid)}, {lit(email)}, "
-                 f"{lit(json.dumps(b.get('data') or {}))}); insert into teste.senhas values ({lit(uid)}, {lit(b['password'])});")
+            psql(f"insert into auth.users (id, email, raw_user_meta_data, encrypted_password) values ({lit(uid)}, {lit(email)}, "
+                 f"{lit(json.dumps(b.get('data') or {}))}, {HASH(b['password'])}); "
+                 f"insert into auth.identities (user_id, provider, provider_id, identity_data) values ({lit(uid)}, 'email', {lit(uid)}, "
+                 f"{lit(json.dumps({'sub': uid, 'email': email}))});")
             return self.responder(200, sessao(uid, email))
         if rota == "user" and metodo == "PUT":
             uid = self.uid()
             if not uid:
                 return self.responder(401, {"msg": "not logged in"})
-            atual = psql(f"select senha from teste.senhas where id = {lit(uid)}")
-            if atual == b["password"]:
+            igual = psql(f"select encrypted_password = extensions.crypt({lit(b['password'])}, encrypted_password) "
+                         f"from auth.users where id = {lit(uid)}")
+            if igual == "t":
                 return self.responder(422, {"error_code": "same_password", "msg": "same password"})
-            psql(f"update teste.senhas set senha = {lit(b['password'])} where id = {lit(uid)}")
+            psql(f"update auth.users set encrypted_password = {HASH(b['password'])} where id = {lit(uid)}")
             return self.responder(200, {"id": uid})
+        if rota == "recover":
+            RECUPERACOES.append({"email": b.get("email"), "redirect_to": q.get("redirect_to")})
+            return self.responder(200, {})
         if rota == "logout":
             return self.responder(204)
         self.responder(404, {"msg": "rota de auth não suportada"})
 
     def rest(self, metodo, tabela, params):
+        if tabela.startswith("rpc/") and metodo == "POST":
+            fn = ident(tabela[4:])
+            b = self.corpo()
+            args = ", ".join(f"{ident(k)} := {lit(v)}" for k, v in b.items())
+            return self.responder(200, rodar(self.uid(), f"select coalesce(to_jsonb(r), 'null'::jsonb) from "
+                                                         f"(select public.{fn}({args})::text as r) s"))
         if tabela not in TABELAS:
             raise ErroBanco("42P01", f"relation {tabela} does not exist")
         a = self.headers.get("Authorization", "")

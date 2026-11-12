@@ -115,6 +115,11 @@ window.Supa = (function () {
       const r = await chamar('/auth/v1/signup?redirect_to=' + volta, { method: 'POST', body: { email, password: senha, data: { nome } }, comLogin: false });
       return aceitarSessao(r); // null quando o Supabase exige confirmar o e-mail
     },
+    // "Esqueci minha senha": o Supabase manda um e-mail com um link que volta para este site
+    async recuperarSenha(email) {
+      const volta = encodeURIComponent(location.origin + location.pathname);
+      await chamar('/auth/v1/recover?redirect_to=' + volta, { method: 'POST', body: { email }, comLogin: false });
+    },
     async trocarSenha(senha) {
       await garantirSessao();
       return chamar('/auth/v1/user', { method: 'PUT', body: { password: senha } });
@@ -143,7 +148,7 @@ window.Supa = (function () {
       }
       const codigo = q.get('error_code') || q.get('error');
       const msg = codigo === 'otp_expired'
-        ? 'Esse link de confirmação já foi usado ou venceu. Se você já tinha clicado nele antes, seu e-mail já está confirmado: é só entrar.'
+        ? 'Esse link já foi usado ou venceu. Se era para confirmar o e-mail e você já tinha clicado antes, é só entrar. Se era para criar uma senha nova, peça outro em "Esqueci minha senha".'
         : 'Não foi possível confirmar o e-mail por esse link. Tente entrar; se não der, faça o cadastro de novo.';
       return { ok: false, msg };
     },
@@ -172,6 +177,10 @@ window.Supa = (function () {
       const r = await rest(`${tabela}?${filtro}`, { method: 'PATCH', body: mudancas, headers: { Prefer: 'return=representation' } });
       if (Array.isArray(r) && !r.length) throw Object.assign(new Error('Você não tem permissão para alterar esse item.'), { status: 403 });
       return Array.isArray(r) ? r[0] : r;
+    },
+    // Chama uma função do banco (ex.: redefinir_senha)
+    async rpc(funcao, args) {
+      return rest('rpc/' + funcao, { method: 'POST', body: args || {} });
     },
     async apagar(tabela, filtro) {
       const r = await rest(`${tabela}?${filtro}`, { method: 'DELETE', headers: { Prefer: 'return=representation' } });

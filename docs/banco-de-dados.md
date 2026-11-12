@@ -135,6 +135,10 @@ Essas regras valem mesmo que alguém tente burlar o site, porque ficam no própr
 | Nº de prateleira no padrão da planilha (A1, M12) | Validação no banco |
 | Toda alteração vai para o histórico, com antes e depois | Gatilho `registrar_alteracao` |
 | "Excluir conta" não apaga a pessoa | O histórico dela continua; `excluido_em` guarda a data |
+| E-mail de conta excluída ou cadastro recusado fica livre para um cadastro novo (o login passa para `excluido-<id>@conta-excluida.invalid`; o perfil guarda o e-mail original para o histórico) | Gatilho `liberar_email_conta` + e-mail único só entre contas ativas |
+| Excluir conta tira a pessoa do sistema em todos os aparelhos | Gatilho `liberar_email_conta` apaga `auth.sessions` e `auth.refresh_tokens` |
+| Admin master define senha provisória para outra pessoa (ninguém vê senhas: o Supabase guarda só o código embaralhado) | Função `redefinir_senha` (confere `eh_admin()`; aviso do Supabase sobre ela é esperado) |
+| "Esqueci minha senha" manda e-mail pelo Supabase Auth | `/auth/v1/recover`; precisa de SMTP próprio para chegar a qualquer e-mail |
 | Contas do TikTok: só admin master adiciona, renomeia, exclui e restaura | RLS + `eh_admin()` |
 | Nome da conta do TikTok em maiúsculas, sem espaços sobrando e sem repetir | Gatilho `proteger_conta_tiktok` + `nome` único |
 | Excluir conta do TikTok não apaga: ela some das escolhas e vídeos/vendas antigos continuam | Campo `ativa` |

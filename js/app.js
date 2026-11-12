@@ -60,9 +60,10 @@
     const p = state.perfil;
     if (!p || (!p.aprovado && p.ativo)) return 'pendente';
     if (!p.ativo) return 'sem-acesso';
-    if (p.senha_provisoria) return 'nova-senha';
+    if (p.senha_provisoria || recuperandoSenha) return 'nova-senha';
     return null;
   }
+  let recuperandoSenha = false;   // chegou pelo link "Esqueci minha senha" do e-mail
 
   async function iniciar(rotaDepois) {
     if (!auth.logado()) { state = vazio(); render(); return; }
@@ -181,7 +182,7 @@
   };
 
   // ---------- Roteamento por hash (#produtos, #analise ...) ----------
-  const PUBLICAS = ['login', 'cadastro'];
+  const PUBLICAS = ['login', 'cadastro', 'esqueci'];
   let relogioTimer = null;
   function rotaAtual() {
     const h = (location.hash || '').replace('#', '');
@@ -212,7 +213,7 @@
     clearInterval(relogioTimer);
     fecharModal();
     (PAGINAS[rota] || PAGINAS.produtos)();
-    if (rota === 'login' || rota === 'cadastro') return;
+    if (PUBLICAS.includes(rota)) return;
     window.scrollTo(0, 0);
     const h1 = $('h1'); if (h1) document.title = h1.textContent + ' | Gerenciador de Estoque e Vídeos';
   }
@@ -281,6 +282,7 @@
 
   document.addEventListener('click', (e) => {
     if (e.target.closest('[data-acao="sair"]')) {
+      recuperandoSenha = false;
       auth.sair().then(() => { state = vazio(); if (location.hash === '#login') render(); else location.hash = 'login'; });
     }
     if (e.target.closest('[data-acao="senha"]')) modalSenha();
@@ -325,7 +327,7 @@
         <p class="err" id="l-err" role="alert" hidden></p>
         <button class="btn" type="submit">Entrar</button>
         <p class="muted" style="font-size:.9rem">Ainda não tem acesso? <a href="#cadastro" class="link-btn">Pedir acesso</a></p>
-        <p class="muted" style="font-size:.85rem">Esqueceu a senha? Fale com o responsável pela loja.</p>
+        <p class="muted" style="font-size:.9rem"><a href="#esqueci" class="link-btn">Esqueci minha senha</a></p>
       </form>`);
     $('#f-login').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -409,13 +411,47 @@
       <button class="btn btn-ghost" type="button" data-acao="sair">Sair</button>`);
   };
 
+  PAGINAS.esqueci = function () {
+    document.title = 'Esqueci minha senha | Gerenciador de Estoque e Vídeos';
+    telaAuth(`
+      <div><h1>Esqueci minha senha</h1>
+        <p class="muted" style="margin-top:8px">Digite o e-mail da sua conta. Vamos mandar um link para você criar uma senha nova.</p></div>
+      <form id="f-esq" novalidate>
+        <div class="field"><label for="esq-email">E-mail</label>
+          <input class="input" id="esq-email" type="email" autocomplete="email" placeholder="nome@loja.com"></div>
+        <p class="err" id="esq-err" role="alert" hidden></p>
+        <button class="btn" type="submit">Enviar link</button>
+        <p class="muted" style="font-size:.9rem"><a href="#login" class="link-btn">Voltar para entrar</a></p>
+        <p class="muted" style="font-size:.85rem">Não chegou o e-mail ou não tem acesso a ele? Peça para um admin master criar uma senha provisória para você.</p>
+      </form>`);
+    $('#esq-email').focus();
+    $('#f-esq').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = $('#esq-email').value.trim().toLowerCase(), err = $('#esq-err');
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { err.textContent = 'Digite um e-mail válido.'; err.hidden = false; return; }
+      const btn = e.submitter || $('#f-esq button[type=submit]');
+      btn.disabled = true; btn.textContent = 'Enviando…'; err.hidden = true;
+      try {
+        await auth.recuperarSenha(email);
+        $('.auth-box').innerHTML = `<div><h1>Confira seu e-mail</h1>
+          <p class="muted" style="margin-top:8px">Se <b>${esc(email)}</b> tiver conta, chega em alguns minutos um e-mail com o link para criar uma senha nova. Olhe também a caixa de spam.</p></div>
+          <p class="muted" style="font-size:.9rem">O link vale por pouco tempo e funciona uma vez só.</p>
+          <a class="btn btn-ghost" href="#login">Voltar para entrar</a>`;
+      } catch (er) {
+        btn.disabled = false; btn.textContent = 'Enviar link';
+        err.textContent = er.message; err.hidden = false;
+      }
+    });
+  };
+
   PAGINAS['nova-senha'] = function () {
     const p = state.perfil || {};
     document.title = 'Crie sua senha | Gerenciador de Estoque e Vídeos';
     telaAuth(`
-      <div><h1>Crie sua senha</h1>
-        <p class="muted" style="margin-top:8px">Olá, ${esc((p.nome || '').split(' ')[0])}! Você entrou com a senha provisória.
-        Escolha uma senha só sua para continuar.</p></div>
+      <div><h1>${recuperandoSenha && !p.senha_provisoria ? 'Crie uma senha nova' : 'Crie sua senha'}</h1>
+        <p class="muted" style="margin-top:8px">Olá, ${esc((p.nome || '').split(' ')[0])}! ${recuperandoSenha && !p.senha_provisoria
+          ? 'Escolha a senha nova da sua conta.'
+          : 'Você entrou com a senha provisória. Escolha uma senha só sua para continuar.'}</p></div>
       <form id="f-ns" novalidate>
         <div class="field"><label for="ns-1">Nova senha</label><input class="input" id="ns-1" type="password" autocomplete="new-password"><span class="hint">Mínimo de 6 caracteres.</span></div>
         <div class="field"><label for="ns-2">Confirmar nova senha</label><input class="input" id="ns-2" type="password" autocomplete="new-password"></div>
@@ -433,8 +469,9 @@
       btn.disabled = true; btn.textContent = 'Salvando…';
       try {
         await auth.trocarSenha(s1);
-        await db.alterar('perfis', `id=eq.${state.sessao}`, { senha_provisoria: false });
+        if (state.perfil.senha_provisoria) await db.alterar('perfis', `id=eq.${state.sessao}`, { senha_provisoria: false });
         state.perfil.senha_provisoria = false;
+        recuperandoSenha = false;
         toast('Senha criada. Bem-vindo!');
         await iniciar('produtos');
       } catch (er) {
@@ -1493,7 +1530,7 @@
     }
     const acoes = ['Adicionou produto', 'Editou produto', 'Excluiu produto', 'Restaurou produto', 'Registrou vídeo', 'Adicionou venda', 'Editou venda', 'Excluiu venda',
       'Criou conta', 'Aprovou cadastro', 'Recusou cadastro', 'Alterou cargo', 'Excluiu conta', 'Reativou conta',
-      'Adicionou conta TikTok', 'Renomeou conta TikTok', 'Excluiu conta TikTok', 'Restaurou conta TikTok', 'Importou planilha'];
+      'Redefiniu senha', 'Adicionou conta TikTok', 'Renomeou conta TikTok', 'Excluiu conta TikTok', 'Restaurou conta TikTok', 'Importou planilha'];
     shell('admin', `
       <div class="page-head"><div><h1>Admin master</h1><p>Cadastros novos, vídeos de cada pessoa, a equipe, as contas do TikTok e tudo o que foi alterado no sistema.</p></div></div>
       <section id="pendentes"></section>
@@ -1561,12 +1598,15 @@
                 : `<select class="input input-sm" data-cargo="${u.id}" aria-label="Cargo de ${esc(u.nome)}">
                     <option value="colaborador" ${u.papel !== 'admin' ? 'selected' : ''}>Colaborador</option>
                     <option value="admin" ${u.papel === 'admin' ? 'selected' : ''}>Admin master</option></select>
-                  <button class="btn btn-danger-ghost btn-sm show-sm-btn" type="button" data-excluir="${u.id}">Excluir conta</button>`}</td>
+                  <button class="btn btn-danger-ghost btn-sm show-sm-btn" type="button" data-excluir="${u.id}">Excluir conta</button>`}
+                ${voce ? '' : `<button class="btn btn-ghost btn-sm show-sm-btn" type="button" data-nova-senha="${u.id}">Nova senha</button>`}</td>
               <td class="r num hide-sm" data-label="Vídeos em 30 dias">${n}</td>
-              <td class="hide-sm c-acoes"><div class="row-actions">${voce || u.fixo ? `<span class="muted" style="font-size:.82rem">${u.fixo ? 'Admin master fixo' : 'Sua conta'}</span>`
-                : `<button class="btn btn-danger-ghost btn-sm" type="button" data-excluir="${u.id}">Excluir</button>`}</div></td></tr>`;
+              <td class="hide-sm c-acoes"><div class="row-actions">${voce ? '<span class="muted" style="font-size:.82rem">Sua conta</span>'
+                : `<button class="btn btn-ghost btn-sm" type="button" data-nova-senha="${u.id}">Nova senha</button>${u.fixo
+                  ? '' : `<button class="btn btn-danger-ghost btn-sm" type="button" data-excluir="${u.id}">Excluir</button>`}`}</div></td></tr>`;
           }).join('')}</tbody></table></div>
-        <p class="muted" style="font-size:.85rem;margin-top:10px">${plural(admins, 'admin master', 'admins master')} ativos. Ricardo e Márcio são admins master fixos: o cargo deles não muda e a conta não pode ser excluída. Você também não pode mudar o próprio cargo nem excluir a própria conta.</p>`;
+        <p class="muted" style="font-size:.85rem;margin-top:10px">${plural(admins, 'admin master', 'admins master')} ativos. Ricardo e Márcio são admins master fixos: o cargo deles não muda e a conta não pode ser excluída. Você também não pode mudar o próprio cargo nem excluir a própria conta.
+          "Nova senha" cria uma senha provisória para quem esqueceu a dela.</p>`;
     };
 
     const desenharRegistros = () => {
@@ -1826,7 +1866,8 @@
       abrirModal({
         titulo: `Excluir a conta de ${esc(u.nome)}?`,
         alerta: true,
-        corpo: `<p class="muted">${esc(u.email)} não vai mais conseguir usar o sistema. ${n ? `Os ${plural(n, 'vídeo', 'vídeos')} e registros dessa pessoa continuam no histórico.` : ''}</p>`,
+        corpo: `<p class="muted">${esc(u.email)} não vai mais conseguir usar o sistema. ${n ? `Os ${plural(n, 'vídeo', 'vídeos')} e registros dessa pessoa continuam no histórico.` : ''}
+          O e-mail fica livre: a pessoa pode pedir acesso de novo com ele, e o cadastro novo vai precisar de aprovação.</p>`,
         botoes: [
           { label: 'Excluir conta', cls: 'btn-red', acao: (ev) => atualizarPerfil(ev.currentTarget, u, { ativo: false }, 'Conta excluída') },
           { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
@@ -1834,6 +1875,60 @@
       });
     });
   };
+
+  // ---------- Nova senha (admin master define uma senha provisória) ----------
+  function gerarSenha() {
+    const palavras = ['jeans', 'loja', 'denim', 'rebite', 'bolso', 'botao', 'barra', 'cinto'];
+    const n = new Uint32Array(2);
+    (window.crypto || window.msCrypto).getRandomValues(n);
+    return `${palavras[n[0] % palavras.length]}-${String(n[1] % 10000).padStart(4, '0')}`;
+  }
+  function modalNovaSenha(u) {
+    abrirModal({
+      titulo: `Nova senha para ${esc(u.nome)}`,
+      corpo: `<p class="muted">Ninguém consegue ver a senha atual de outra pessoa. Você define uma senha provisória,
+          passa para ${esc(u.nome.split(' ')[0])} e, ao entrar com ela, o site pede para criar uma senha própria.</p>
+        <div class="field"><label for="ns-prov">Senha provisória</label>
+          <div class="input-com-botao"><input class="input senha-prov" id="ns-prov" type="text" autocomplete="off" spellcheck="false" value="${gerarSenha()}">
+          <button class="btn btn-ghost" type="button" id="ns-gerar">Gerar outra</button></div>
+          <span class="err" id="ns-prov-err" role="alert"></span></div>
+        <p class="muted" style="font-size:.85rem">${esc(u.nome.split(' ')[0])} sai do sistema nos aparelhos em que estiver usando.</p>`,
+      botoes: [
+        { label: 'Definir senha provisória', acao: (ev) => definir(ev.currentTarget) },
+        { label: 'Cancelar', cls: 'btn-ghost', acao: fecharModal }
+      ]
+    });
+    const inp = $('#ns-prov'), err = $('#ns-prov-err');
+    inp.focus(); inp.select();
+    $('#ns-gerar').addEventListener('click', () => { inp.value = gerarSenha(); err.textContent = ''; inp.focus(); });
+    inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); definir($('.modal [data-b="0"]')); } });
+    async function definir(btn) {
+      const senha = inp.value.trim();
+      if (senha.length < 6) { err.textContent = 'A senha precisa ter pelo menos 6 caracteres.'; inp.focus(); return; }
+      const ok = await executar(btn, async () => { await db.rpc('redefinir_senha', { p_usuario: u.id, p_senha: senha }); });
+      if (!ok) return;
+      try { await carregarDados(); } catch (e) { /* segue */ }
+      abrirModal({
+        titulo: 'Senha provisória definida',
+        corpo: `<p class="muted">Passe esta senha para ${esc(u.nome)} (${esc(u.email)}):</p>
+          <div class="senha-mostrar"><code id="ns-pronta">${esc(senha)}</code>
+            <button class="btn btn-ghost btn-sm" type="button" id="ns-copiar">${ICON.copiar}<span>Copiar</span></button></div>
+          <p class="muted" style="font-size:.85rem">Ela não fica guardada em lugar nenhum: depois de fechar esta janela, não dá para ver de novo.
+            Se perder, é só criar outra.</p>`,
+        botoes: [{ label: 'Pronto', acao: () => { fecharModal(); render(); } }]
+      });
+      $('#ns-copiar').addEventListener('click', async (ev) => {
+        const b = ev.currentTarget;
+        if (await copiarTexto(senha)) { b.innerHTML = ICON.certo + '<span>Copiada</span>'; toast('Senha copiada'); }
+        else { const r = document.createRange(); r.selectNodeContents($('#ns-pronta')); getSelection().removeAllRanges(); getSelection().addRange(r); }
+      });
+    }
+  }
+  document.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-nova-senha]'); if (!b) return;
+    const u = state.usuarios.find((x) => x.id === b.dataset.novaSenha);
+    if (u) modalNovaSenha(u);
+  });
 
   // Texto legível de um registro do histórico (traduz as mudanças guardadas pelo banco)
   const ROTULOS = { local: 'local', prateleira: 'prateleira', descricao: 'descrição', quantidade: 'peças',
@@ -1860,6 +1955,7 @@
   (async () => {
     let retorno = null;
     try { retorno = await auth.lerRetornoDoEmail(); } catch (e) { retorno = null; }
+    if (retorno && retorno.ok && retorno.tipo === 'recovery') { recuperandoSenha = true; await iniciar('produtos'); return; }
     if (retorno && retorno.ok) { await iniciar('produtos'); toast('E-mail confirmado!'); return; }
     if (retorno && !retorno.ok) { location.hash = 'login'; await iniciar(); toast(retorno.msg, true); return; }
     iniciar();

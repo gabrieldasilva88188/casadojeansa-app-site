@@ -85,6 +85,40 @@ select teste.confere((select count(*) = 1 from public.registros where acao = 'Re
   'admin recusa cadastro e a recusa entra nos registros');
 reset role;
 
+-- E-mail de conta excluída/recusada fica livre para um cadastro novo
+select teste.confere((select email = 'excluido-' || id || '@conta-excluida.invalid' from auth.users
+                       where id = (select id from public.perfis where email = 'intruso@exemplo.com')),
+  'ao recusar, o login da conta passa para um e-mail interno');
+insert into auth.users (email, raw_user_meta_data) values ('intruso@exemplo.com', '{"nome": "Pessoa Nova"}');
+select teste.confere((select count(*) = 2 from public.perfis where email = 'intruso@exemplo.com')
+                     and (select count(*) = 1 from public.perfis where email = 'intruso@exemplo.com' and ativo and not aprovado),
+  'o mesmo e-mail pode se cadastrar de novo (cadastro novo aguarda aprovação)');
+select set_config('request.jwt.claim.sub', teste.id_de('marcio@exemplo.com'), false);
+set role authenticated;
+select teste.barrado($$ update public.perfis set ativo = true where email = 'intruso@exemplo.com' and not ativo $$,
+  'não reativa a conta antiga se o e-mail já está num cadastro novo');
+update public.perfis set ativo = false where email = 'intruso@exemplo.com' and ativo;
+update public.perfis set ativo = true where nome = 'Pessoa Desconhecida';
+reset role;
+select teste.confere((select u.email = 'intruso@exemplo.com' from auth.users u join public.perfis p on p.id = u.id
+                       where p.nome = 'Pessoa Desconhecida'),
+  'ao reativar, o login volta para o e-mail original');
+select set_config('request.jwt.claim.sub', teste.id_de('marcio@exemplo.com'), false);
+set role authenticated;
+update public.perfis set ativo = false where nome = 'Pessoa Desconhecida';
+reset role;
+insert into auth.sessions (user_id) select id from public.perfis where nome = 'Pessoa Nova';
+insert into auth.refresh_tokens (user_id, session_id, token)
+  select s.user_id::text, s.id, 'tok' from auth.sessions s join public.perfis p on p.id = s.user_id where p.nome = 'Pessoa Nova';
+select set_config('request.jwt.claim.sub', teste.id_de('marcio@exemplo.com'), false);
+set role authenticated;
+update public.perfis set ativo = true where nome = 'Pessoa Nova';
+update public.perfis set ativo = false where nome = 'Pessoa Nova';
+reset role;
+select teste.confere((select count(*) = 0 from auth.sessions s join public.perfis p on p.id = s.user_id where p.nome = 'Pessoa Nova')
+                     and (select count(*) = 0 from auth.refresh_tokens where token = 'tok'),
+  'excluir conta tira a pessoa do sistema em todos os aparelhos');
+
 -- Senha provisória (marcada pelo responsável técnico, sem usuário logado)
 select set_config('request.jwt.claim.sub', '', false);
 update public.perfis set senha_provisoria = true where fixo;
@@ -101,6 +135,37 @@ select teste.confere((select not senha_provisoria from public.perfis where email
 select teste.barrado($$ update public.perfis set senha_provisoria = true where email = 'ketlin@exemplo.com' $$,
   'o app não marca senha provisória em ninguém');
 reset role;
+
+-- Admin master redefine a senha de outra pessoa
+insert into auth.sessions (user_id) values (teste.id_de('ketlin@exemplo.com')::uuid);
+select set_config('request.jwt.claim.sub', teste.id_de('mariana@exemplo.com'), false);
+set role authenticated;
+select teste.barrado($$ select public.redefinir_senha(teste.id_de('ketlin@exemplo.com')::uuid, 'senha123') $$,
+  'colaborador não redefine a senha de ninguém');
+reset role;
+select set_config('request.jwt.claim.sub', teste.id_de('ricardo@exemplo.com'), false);
+set role authenticated;
+select teste.barrado($$ select public.redefinir_senha(teste.id_de('ketlin@exemplo.com')::uuid, '123') $$,
+  'senha nova precisa ter pelo menos 6 caracteres');
+select teste.barrado($$ select public.redefinir_senha(teste.id_de('ricardo@exemplo.com')::uuid, 'senha123') $$,
+  'admin não usa "redefinir" na própria conta');
+select public.redefinir_senha(teste.id_de('ketlin@exemplo.com')::uuid, 'loja-4821');
+reset role;
+select teste.confere((select encrypted_password = extensions.crypt('loja-4821', encrypted_password) from auth.users where email = 'ketlin@exemplo.com'),
+  'admin define a senha provisória (guardada embaralhada)');
+select teste.confere((select senha_provisoria from public.perfis where email = 'ketlin@exemplo.com'),
+  'a pessoa vai ter que criar uma senha própria ao entrar');
+select teste.confere((select count(*) = 0 from auth.sessions where user_id = teste.id_de('ketlin@exemplo.com')::uuid),
+  'redefinir a senha tira a pessoa do sistema nos outros aparelhos');
+select teste.confere((select count(*) = 1 from public.registros where acao = 'Redefiniu senha' and detalhe = 'Ketlin Raiane'
+                        and usuario_id = teste.id_de('ricardo@exemplo.com')::uuid),
+  'redefinição de senha entra no histórico (sem a senha)');
+select set_config('request.jwt.claim.sub', teste.id_de('ketlin@exemplo.com'), false);
+set role authenticated;
+update public.perfis set senha_provisoria = false where email = 'ketlin@exemplo.com';
+reset role;
+select teste.confere((select not senha_provisoria from public.perfis where email = 'ketlin@exemplo.com'),
+  'a pessoa confirma que criou a senha própria');
 
 -- =====================================================================
 -- Como COLABORADORA (Ketlin)
